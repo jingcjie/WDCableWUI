@@ -1,0 +1,241 @@
+<Page
+    x:Class="WDCableWUI.UI.Connection.ConnectionPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:WDCableWUI.UI.Connection"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    Background="Transparent">
+
+    <Page.Resources>
+        <local:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
+    </Page.Resources>
+
+    <ScrollViewer>
+        <Grid Margin="24">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <!-- Header -->
+            <StackPanel Grid.Row="0" Spacing="8" Margin="0,0,0,24">
+                <TextBlock Text="WiFi Direct Connection"
+                          Style="{StaticResource SubtitleTextBlockStyle}"
+                          Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                <TextBlock Text="Connect and share files with nearby devices using WiFi Direct"
+                          Style="{StaticResource CaptionTextBlockStyle}"
+                          Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+            </StackPanel>
+
+            <!-- Main Content -->
+            <Grid Grid.Row="1">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="1*"/>
+                    <ColumnDefinition Width="16"/>
+                    <ColumnDefinition Width="1*"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Device Settings Panel -->
+                <Border Grid.Column="0"
+                       Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                       BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                       BorderThickness="1"
+                       CornerRadius="8"
+                       Padding="20">
+                    
+                    <StackPanel Spacing="20">
+                        <!-- Device Visibility Section -->
+                        <StackPanel Spacing="12">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon FontFamily="{StaticResource SymbolThemeFontFamily}"
+                                         Glyph="&#xE8B8;"
+                                         FontSize="20"
+                                         Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
+                                <TextBlock Text="Device Visibility"
+                                          Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                            </StackPanel>
+                            
+                            <TextBlock Text="Make this device discoverable by other WiFi Direct devices"
+                                      Style="{StaticResource CaptionTextBlockStyle}"
+                                      Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                      TextWrapping="Wrap"/>
+                            
+                            <ToggleSwitch x:Name="DiscoverableToggle"
+                                         Header="Make device discoverable"
+                                         OnContent="Discoverable"
+                                         OffContent="Hidden"
+                                         Toggled="OnDiscoverableToggled"/>
+                        </StackPanel>
+
+                        <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}"/>
+
+                        <!-- Device Scanning Section -->
+                        <StackPanel Spacing="12">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon FontFamily="{StaticResource SymbolThemeFontFamily}"
+                                         Glyph="&#xE1A3;"
+                                         FontSize="20"
+                                         Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
+                                <TextBlock Text="Device Discovery"
+                                          Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                            </StackPanel>
+                            
+                            <TextBlock Text="Scan for nearby WiFi Direct devices"
+                                      Style="{StaticResource CaptionTextBlockStyle}"
+                                      Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                            
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Button x:Name="ScanButton"
+                                       Content="Start Scan"
+                                       Style="{StaticResource AccentButtonStyle}"
+                                       Click="OnScanButtonClick"/>
+                                <Button x:Name="StopScanButton"
+                                       Content="Stop Scan"
+                                       IsEnabled="False"
+                                       Click="OnStopScanButtonClick"/>
+                            </StackPanel>
+                        </StackPanel>
+
+                        <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}"/>
+
+                        <!-- Connection Status Section -->
+                        <StackPanel Spacing="12">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon FontFamily="{StaticResource SymbolThemeFontFamily}"
+                                         Glyph="&#xE968;"
+                                         FontSize="20"
+                                         Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
+                                <TextBlock Text="Connection Status"
+                                          Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                            </StackPanel>
+                            
+                            <Border Background="{ThemeResource SystemFillColorSolidNeutralBackgroundBrush}"
+                                   BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                   BorderThickness="1"
+                                   CornerRadius="4"
+                                   Padding="12">
+                                <StackPanel Spacing="8">
+                                    <TextBlock x:Name="ConnectionStatusText"
+                                              Text="Not connected"
+                                              Style="{StaticResource BodyTextBlockStyle}"/>
+                                    <TextBlock x:Name="DeviceRoleText"
+                                              Text=""
+                                              Style="{StaticResource CaptionTextBlockStyle}"
+                                              Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                </StackPanel>
+                            </Border>
+                            
+                            <Button x:Name="DisconnectButton"
+                                   Content="Disconnect"
+                                   IsEnabled="False"
+                                   Click="OnDisconnectButtonClick"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- Device List Panel -->
+                <Border Grid.Column="2"
+                       Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                       BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                       BorderThickness="1"
+                       CornerRadius="8"
+                       Padding="20">
+                    
+                    <StackPanel Spacing="16">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon FontFamily="{StaticResource SymbolThemeFontFamily}"
+                                     Glyph="&#xE8EA;"
+                                     FontSize="20"
+                                     Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
+                            <TextBlock Text="Available Devices"
+                                      Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                        </StackPanel>
+                        
+                        <TextBlock Text="Devices found during scan will appear here"
+                                  Style="{StaticResource CaptionTextBlockStyle}"
+                                  Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                        
+                        <!-- Device List -->
+                        <ScrollViewer MaxHeight="400" VerticalScrollBarVisibility="Auto">
+                            <ListView x:Name="DeviceListView"
+                                     SelectionMode="None">
+                                <ListView.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Background="{ThemeResource SubtleFillColorTransparentBrush}"
+                                               BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                               BorderThickness="1"
+                                               CornerRadius="6"
+                                               Padding="12"
+                                               Margin="0,2">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                
+                                                <FontIcon Grid.Column="0"
+                                                         FontFamily="{StaticResource SymbolThemeFontFamily}"
+                                                         Glyph="&#xE8EA;"
+                                                         FontSize="16"
+                                                         Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                                                         Margin="0,0,12,0"/>
+                                                
+                                                <StackPanel Grid.Column="1">
+                                                    <TextBlock Text="{Binding Name}"
+                                                              Style="{StaticResource BodyTextBlockStyle}"/>
+                                                    <TextBlock Text="{Binding Status}"
+                                                              Style="{StaticResource CaptionTextBlockStyle}"
+                                                              Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                                </StackPanel>
+                                                
+                                                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8">
+                                                    <Button Content="Connect"
+                                                           Style="{StaticResource AccentButtonStyle}"
+                                                           FontSize="12"
+                                                           Padding="8,4"
+                                                           Click="OnConnectButtonClick"
+                                                           Tag="{Binding}"
+                                                           Visibility="{Binding IsConnected, Converter={StaticResource BoolToVisibilityConverter}, ConverterParameter=Inverse}"/>
+                                                    <Button Content="Disconnect"
+                                                           FontSize="12"
+                                                           Padding="8,4"
+                                                           Click="OnDisconnectDeviceButtonClick"
+                                                           Tag="{Binding}"
+                                                           Visibility="{Binding IsConnected, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                                </StackPanel>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ListView.ItemTemplate>
+                            </ListView>
+                        </ScrollViewer>
+                        
+                        <!-- Empty State -->
+                        <StackPanel x:Name="EmptyStatePanel"
+                                   Spacing="12"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   Visibility="Visible">
+                            <FontIcon FontFamily="{StaticResource SymbolThemeFontFamily}"
+                                     Glyph="&#xE1A3;"
+                                     FontSize="32"
+                                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                     HorizontalAlignment="Center"/>
+                            <TextBlock Text="No devices found"
+                                      Style="{StaticResource BodyTextBlockStyle}"
+                                      Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                      HorizontalAlignment="Center"/>
+                            <TextBlock Text="Start scanning to discover nearby devices"
+                                      Style="{StaticResource CaptionTextBlockStyle}"
+                                      Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                      HorizontalAlignment="Center"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Grid>
+    </ScrollViewer>
+</Page>

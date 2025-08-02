@@ -1,0 +1,66 @@
+<Page
+    x:Class="WDCableWUI.UI.FileTransfer.FileTransferPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:WDCableWUI.UI.FileTransfer"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    Background="Transparent">
+
+    <ScrollViewer>
+        <Grid Margin="24">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <!-- Header -->
+            <StackPanel Grid.Row="0" Spacing="8" Margin="0,0,0,24">
+                <TextBlock Text="File Transfer"
+                          Style="{StaticResource SubtitleTextBlockStyle}"
+                          Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                <TextBlock Text="Send and receive files with the connected device"
+                          Style="{StaticResource CaptionTextBlockStyle}"
+                          Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+            </StackPanel>
+
+            <!-- Content Area -->
+            <Border Grid.Row="1"
+                   Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                   BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                   BorderThickness="1"
+                   CornerRadius="8"
+                   Padding="24">
+                
+                <StackPanel Spacing="16" HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <FontIcon FontFamily="{StaticResource SymbolThemeFontFamily}"
+                             Glyph="&#xE8B5;"
+                             FontSize="48"
+                             Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
+                    
+                    <TextBlock Text="File Transfer"
+                              Style="{StaticResource TitleTextBlockStyle}"
+                              HorizontalAlignment="Center"/>
+                    
+                    <TextBlock Text="File transfer UI will be implemented here"
+                              Style="{StaticResource BodyTextBlockStyle}"
+                              Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                              HorizontalAlignment="Center"/>
+                    
+                    <TextBlock Text="Features to include:"
+                              Style="{StaticResource BodyStrongTextBlockStyle}"
+                              Margin="0,16,0,8"/>
+                    
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="• Drag and drop file sending"/>
+                        <TextBlock Text="• File browser for selection"/>
+                        <TextBlock Text="• Transfer progress tracking"/>
+                        <TextBlock Text="• Transfer history"/>
+                        <TextBlock Text="• Resume interrupted transfers"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </Grid>
+    </ScrollViewer>
+</Page>

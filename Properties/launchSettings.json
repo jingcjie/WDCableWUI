@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "WDCableWUI (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "WDCableWUI (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}
