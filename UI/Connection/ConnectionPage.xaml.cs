@@ -46,7 +46,7 @@ namespace WDCableWUI.UI.Connection
     /// </summary>
     public sealed partial class ConnectionPage : Page
     {
-        private WiFiDirectService _wifiDirectService;
+        private WiFiDirectService? _wifiDirectService;
         private readonly DispatcherQueue _dispatcherQueue;
         private bool _isInitialized = false;
 
@@ -65,15 +65,18 @@ namespace WDCableWUI.UI.Connection
                 _wifiDirectService = ServiceManager.WiFiDirectService;
                 
                 // Subscribe to events
-                _wifiDirectService.DeviceDiscovered += OnDeviceDiscovered;
-                _wifiDirectService.DeviceConnected += OnDeviceConnected;
-                _wifiDirectService.DeviceDisconnected += OnDeviceDisconnected;
-                _wifiDirectService.StatusChanged += OnStatusChanged;
-                _wifiDirectService.ErrorOccurred += OnErrorOccurred;
-                _wifiDirectService.ConnectionRequested += OnConnectionRequested;
+                if (_wifiDirectService != null)
+                {
+                    _wifiDirectService.DeviceDiscovered += OnDeviceDiscovered;
+                    _wifiDirectService.DeviceConnected += OnDeviceConnected;
+                    _wifiDirectService.DeviceDisconnected += OnDeviceDisconnected;
+                    _wifiDirectService.StatusChanged += OnStatusChanged;
+                    _wifiDirectService.ErrorOccurred += OnErrorOccurred;
+                    _wifiDirectService.ConnectionRequested += OnConnectionRequested;
+                }
                 
                 // Bind device list to ListView
-                DeviceListView.ItemsSource = _wifiDirectService.DiscoveredDevices;
+                DeviceListView.ItemsSource = _wifiDirectService?.DiscoveredDevices;
                 
                 _isInitialized = true;
             }
@@ -111,7 +114,7 @@ namespace WDCableWUI.UI.Connection
             {
                 if (toggle.IsOn)
                 {
-                    var success = await _wifiDirectService.StartAdvertisingAsync("WDCableWUI Device");
+                    var success = _wifiDirectService != null ? await _wifiDirectService.StartAdvertisingAsync("WDCableWUI Device") : false;
                     if (!success)
                     {
                         toggle.IsOn = false;
@@ -120,7 +123,7 @@ namespace WDCableWUI.UI.Connection
                 }
                 else
                 {
-                    _wifiDirectService.StopAdvertising();
+                    _wifiDirectService?.StopAdvertising();
                 }
             }
             catch (Exception ex)
@@ -136,7 +139,7 @@ namespace WDCableWUI.UI.Connection
 
             try
             {
-                var success = await _wifiDirectService.StartScanningAsync();
+                var success = _wifiDirectService != null ? await _wifiDirectService.StartScanningAsync() : false;
                 if (success)
                 {
                     ScanButton.IsEnabled = false;
@@ -160,11 +163,11 @@ namespace WDCableWUI.UI.Connection
 
             try
             {
-                _wifiDirectService.StopScanning();
+                _wifiDirectService?.StopScanning();
                 ScanButton.IsEnabled = true;
                 StopScanButton.IsEnabled = false;
                 
-                if (_wifiDirectService.DiscoveredDevices.Count == 0)
+                if (_wifiDirectService?.DiscoveredDevices.Count == 0)
                 {
                     EmptyStatePanel.Visibility = Visibility.Visible;
                 }
@@ -188,7 +191,7 @@ namespace WDCableWUI.UI.Connection
                 // Show connecting status
                 device.Status = "Connecting...";
                 
-                var success = await _wifiDirectService.ConnectToDeviceAsync(device);
+                var success = _wifiDirectService != null ? await _wifiDirectService.ConnectToDeviceAsync(device) : false;
                 if (!success)
                 {
                     device.Status = "Connection failed";
@@ -212,7 +215,7 @@ namespace WDCableWUI.UI.Connection
 
             try
             {
-                await _wifiDirectService.DisconnectAsync();
+                await (_wifiDirectService?.DisconnectAsync() ?? Task.CompletedTask);
             }
             catch (Exception ex)
             {
@@ -226,7 +229,7 @@ namespace WDCableWUI.UI.Connection
 
             try
             {
-                await _wifiDirectService.DisconnectAsync();
+                await (_wifiDirectService?.DisconnectAsync() ?? Task.CompletedTask);
             }
             catch (Exception ex)
             {
@@ -234,31 +237,31 @@ namespace WDCableWUI.UI.Connection
             }
         }
 
-        private void OnDeviceDiscovered(object sender, WiFiDirectDevice device)
+        private void OnDeviceDiscovered(object? sender, WiFiDirectDevice device)
         {
             _dispatcherQueue.TryEnqueue(() => {
                 EmptyStatePanel.Visibility = Visibility.Collapsed;
             });
         }
 
-        private void OnDeviceConnected(object sender, WiFiDirectDevice device)
+        private void OnDeviceConnected(object? sender, WiFiDirectDevice device)
         {
             _dispatcherQueue.TryEnqueue(() => {
                 UpdateConnectionStatus($"Connected to {device.Name}", 
-                    _wifiDirectService.IsGroupOwner ? "Group Owner" : "Client");
+                    _wifiDirectService?.IsGroupOwner == true ? "Group Owner" : "Client");
                 DisconnectButton.IsEnabled = true;
                 
                 // Stop scanning when connected
-                if (_wifiDirectService.IsScanning)
+                if (_wifiDirectService?.IsScanning == true)
                 {
-                    _wifiDirectService.StopScanning();
+                    _wifiDirectService?.StopScanning();
                     ScanButton.IsEnabled = true;
                     StopScanButton.IsEnabled = false;
                 }
             });
         }
 
-        private void OnDeviceDisconnected(object sender, EventArgs e)
+        private void OnDeviceDisconnected(object? sender, EventArgs e)
         {
             _dispatcherQueue.TryEnqueue(() => {
                 UpdateConnectionStatus("Not connected", "");
@@ -266,7 +269,7 @@ namespace WDCableWUI.UI.Connection
             });
         }
 
-        private void OnStatusChanged(object sender, string status)
+        private void OnStatusChanged(object? sender, string status)
         {
             _dispatcherQueue.TryEnqueue(() => {
                 // You could add a status bar or notification here
@@ -278,14 +281,14 @@ namespace WDCableWUI.UI.Connection
             });
         }
 
-        private void OnErrorOccurred(object sender, string error)
+        private void OnErrorOccurred(object? sender, string error)
         {
             _dispatcherQueue.TryEnqueue(() => {
                 ShowError(error);
             });
         }
         
-        private async void OnConnectionRequested(object sender, WDCableWUI.Services.ConnectionRequestEventArgs e)
+        private async void OnConnectionRequested(object? sender, WDCableWUI.Services.ConnectionRequestEventArgs e)
         {
             try
             {
@@ -311,16 +314,16 @@ namespace WDCableWUI.UI.Connection
             if (!_isInitialized) return;
 
             // Update button states based on current service state
-            ScanButton.IsEnabled = !_wifiDirectService.IsScanning;
-            StopScanButton.IsEnabled = _wifiDirectService.IsScanning;
-            DisconnectButton.IsEnabled = _wifiDirectService.IsConnected;
-            DiscoverableToggle.IsOn = _wifiDirectService.IsAdvertising;
+            ScanButton.IsEnabled = !(_wifiDirectService?.IsScanning ?? false);
+            StopScanButton.IsEnabled = _wifiDirectService?.IsScanning ?? false;
+            DisconnectButton.IsEnabled = _wifiDirectService?.IsConnected ?? false;
+            DiscoverableToggle.IsOn = _wifiDirectService?.IsAdvertising ?? false;
             
             // Update connection status
-            if (_wifiDirectService.IsConnected)
+            if (_wifiDirectService?.IsConnected == true)
             {
-                UpdateConnectionStatus($"Connected to {_wifiDirectService.ConnectedDevice?.Name}",
-                    _wifiDirectService.IsGroupOwner ? "Group Owner" : "Client");
+                UpdateConnectionStatus($"Connected to {_wifiDirectService?.ConnectedDevice?.Name}",
+                    _wifiDirectService?.IsGroupOwner == true ? "Group Owner" : "Client");
             }
             else
             {
@@ -328,7 +331,7 @@ namespace WDCableWUI.UI.Connection
             }
             
             // Update empty state visibility
-            EmptyStatePanel.Visibility = _wifiDirectService.DiscoveredDevices.Count == 0 ? 
+            EmptyStatePanel.Visibility = (_wifiDirectService?.DiscoveredDevices.Count ?? 0) == 0 ? 
                 Visibility.Visible : Visibility.Collapsed;
         }
 

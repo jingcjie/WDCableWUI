@@ -93,7 +93,7 @@ namespace WDCableWUI
         
         private void NavigateToPage(string pageTag)
         {
-            if (_pageTypes.TryGetValue(pageTag, out Type pageType))
+            if (_pageTypes.TryGetValue(pageTag, out Type? pageType))
             {
                 ContentFrame.Navigate(pageType);
             }
@@ -115,11 +115,6 @@ namespace WDCableWUI
                 ConnectionStatusText.Text = "Disconnected";
                 DeviceInfo.Text = "No device connected";
             }
-        }
-        
-        public void UpdateStatusMessage(string message)
-        {
-            StatusMessage.Text = message;
         }
         
         public void ShowNotificationBadge(string tabTag, int count = 1)

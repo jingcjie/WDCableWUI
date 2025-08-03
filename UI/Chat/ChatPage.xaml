@@ -8,59 +8,202 @@
     mc:Ignorable="d"
     Background="Transparent">
 
-    <ScrollViewer>
-        <Grid Margin="24">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="*"/>
-            </Grid.RowDefinitions>
+    <Page.Resources>
+        <!-- Message bubble styles -->
+        <Style x:Key="SelfMessageBubble" TargetType="Border">
+            <Setter Property="Background" Value="{ThemeResource AccentFillColorDefaultBrush}"/>
+            <Setter Property="CornerRadius" Value="16,16,4,16"/>
+            <Setter Property="Padding" Value="12,8"/>
+            <Setter Property="Margin" Value="48,4,8,4"/>
+            <Setter Property="HorizontalAlignment" Value="Right"/>
+            <Setter Property="MaxWidth" Value="300"/>
+        </Style>
+        
+        <Style x:Key="PeerMessageBubble" TargetType="Border">
+            <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}"/>
+            <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="16,16,16,4"/>
+            <Setter Property="Padding" Value="12,8"/>
+            <Setter Property="Margin" Value="8,4,48,4"/>
+            <Setter Property="HorizontalAlignment" Value="Left"/>
+            <Setter Property="MaxWidth" Value="300"/>
+        </Style>
+        
+        <Style x:Key="SystemMessageBubble" TargetType="Border">
+            <Setter Property="Background" Value="{ThemeResource SystemFillColorCautionBackgroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{ThemeResource SystemFillColorCautionBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="Padding" Value="12,6"/>
+            <Setter Property="Margin" Value="24,4"/>
+            <Setter Property="HorizontalAlignment" Value="Center"/>
+            <Setter Property="MaxWidth" Value="400"/>
+        </Style>
+        
+        <Style x:Key="MessageText" TargetType="TextBlock">
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="IsTextSelectionEnabled" Value="True"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="LineHeight" Value="20"/>
+        </Style>
+        
+        <Style x:Key="SelfMessageText" TargetType="TextBlock" BasedOn="{StaticResource MessageText}">
+            <Setter Property="Foreground" Value="{ThemeResource TextOnAccentFillColorPrimaryBrush}"/>
+        </Style>
+        
+        <Style x:Key="PeerMessageText" TargetType="TextBlock" BasedOn="{StaticResource MessageText}">
+            <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}"/>
+        </Style>
+        
+        <Style x:Key="SystemMessageText" TargetType="TextBlock" BasedOn="{StaticResource MessageText}">
+            <Setter Property="Foreground" Value="{ThemeResource SystemFillColorCautionBrush}"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="HorizontalAlignment" Value="Center"/>
+        </Style>
+    </Page.Resources>
 
-            <!-- Header -->
-            <StackPanel Grid.Row="0" Spacing="8" Margin="0,0,0,24">
-                <TextBlock Text="Chat Communication"
-                          Style="{StaticResource SubtitleTextBlockStyle}"
-                          Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
-                <TextBlock Text="Send and receive messages with the connected device"
-                          Style="{StaticResource CaptionTextBlockStyle}"
-                          Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-            </StackPanel>
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
 
-            <!-- Content Area -->
-            <Border Grid.Row="1"
-                   Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                   BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                   BorderThickness="1"
-                   CornerRadius="8"
-                   Padding="24">
+        <!-- Header with Connection Status -->
+        <StackPanel Grid.Row="0" Spacing="8" Margin="0,0,0,16">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
                 
-                <StackPanel Spacing="16" HorizontalAlignment="Center" VerticalAlignment="Center">
+                <StackPanel Grid.Column="0">
+                    <TextBlock Text="Chat Communication"
+                              Style="{StaticResource SubtitleTextBlockStyle}"
+                              Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                    <TextBlock Text="Send and receive messages with the connected device"
+                              Style="{StaticResource CaptionTextBlockStyle}"
+                              Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                </StackPanel>
+                
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <TextBlock x:Name="ConnectionStatusText"
+                              Text="Disconnected"
+                              Style="{StaticResource CaptionTextBlockStyle}"
+                              Foreground="{ThemeResource SystemFillColorCriticalBrush}"/>
+                </StackPanel>
+            </Grid>
+        </StackPanel>
+
+        <!-- Chat Messages Area -->
+        <Border Grid.Row="1"
+               Background="{ThemeResource LayerFillColorDefaultBrush}"
+               BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+               BorderThickness="1"
+               CornerRadius="8"
+               Margin="0,0,0,16">
+            
+            <Grid>
+                <!-- Messages List -->
+                <ScrollViewer x:Name="MessagesScrollViewer"
+                             ZoomMode="Disabled"
+                             HorizontalScrollMode="Disabled"
+                             HorizontalScrollBarVisibility="Disabled"
+                             VerticalScrollBarVisibility="Auto"
+                             Padding="8">
+                    <ItemsControl x:Name="MessagesItemsControl">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                    </ItemsControl>
+                </ScrollViewer>
+                
+                <!-- Empty State -->
+                <StackPanel x:Name="EmptyStatePanel"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"
+                           Spacing="16"
+                           Visibility="Visible">
                     <FontIcon FontFamily="{StaticResource SymbolThemeFontFamily}"
                              Glyph="&#xE8BD;"
                              FontSize="48"
-                             Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
-                    
-                    <TextBlock Text="Chat Interface"
-                              Style="{StaticResource TitleTextBlockStyle}"
-                              HorizontalAlignment="Center"/>
-                    
-                    <TextBlock Text="Chat UI will be implemented here"
+                             Foreground="{ThemeResource TextFillColorTertiaryBrush}"/>
+                    <TextBlock Text="No messages yet"
                               Style="{StaticResource BodyTextBlockStyle}"
                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                               HorizontalAlignment="Center"/>
-                    
-                    <TextBlock Text="Features to include:"
-                              Style="{StaticResource BodyStrongTextBlockStyle}"
-                              Margin="0,16,0,8"/>
-                    
-                    <StackPanel Spacing="8">
-                        <TextBlock Text="• Real-time messaging"/>
-                        <TextBlock Text="• Message history"/>
-                        <TextBlock Text="• Typing indicators"/>
-                        <TextBlock Text="• Message delivery status"/>
-                        <TextBlock Text="• Emoji support"/>
-                    </StackPanel>
+                    <TextBlock Text="Start a conversation by typing a message below"
+                              Style="{StaticResource CaptionTextBlockStyle}"
+                              Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                              HorizontalAlignment="Center"/>
                 </StackPanel>
-            </Border>
-        </Grid>
-    </ScrollViewer>
+                
+                <!-- Disabled Overlay -->
+                <Border x:Name="DisabledOverlay"
+                       Background="{ThemeResource LayerFillColorDefaultBrush}"
+                       Opacity="0.8"
+                       Visibility="Collapsed">
+                    <StackPanel HorizontalAlignment="Center"
+                               VerticalAlignment="Center"
+                               Spacing="16">
+                        <FontIcon FontFamily="{StaticResource SymbolThemeFontFamily}"
+                                 Glyph="&#xE703;"
+                                 FontSize="48"
+                                 Foreground="{ThemeResource SystemFillColorCriticalBrush}"/>
+                        <TextBlock Text="WiFi Direct Connection Required"
+                                  Style="{StaticResource SubtitleTextBlockStyle}"
+                                  Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                                  HorizontalAlignment="Center"/>
+                        <TextBlock Text="Please establish a WiFi Direct connection to start chatting"
+                                  Style="{StaticResource BodyTextBlockStyle}"
+                                  Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                  HorizontalAlignment="Center"
+                                  TextAlignment="Center"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+
+        <!-- Message Input Area -->
+        <Border Grid.Row="2"
+               Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+               BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+               BorderThickness="1"
+               CornerRadius="8"
+               Padding="16">
+            
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                
+                <TextBox x:Name="MessageTextBox"
+                        Grid.Column="0"
+                        PlaceholderText="Type a message..."
+                        AcceptsReturn="True"
+                        TextWrapping="Wrap"
+                        MaxHeight="120"
+                        VerticalAlignment="Top"
+                        Margin="0,0,12,0"
+                        KeyDown="MessageTextBox_KeyDown"/>
+                
+                <Button x:Name="SendButton"
+                       Grid.Column="1"
+                       Style="{StaticResource AccentButtonStyle}"
+                       VerticalAlignment="Bottom"
+                       Width="40"
+                       Height="32"
+                       Padding="0"
+                       Click="SendButton_Click">
+                    <FontIcon FontFamily="{StaticResource SymbolThemeFontFamily}"
+                             Glyph="&#xE724;"
+                             FontSize="16"/>
+                </Button>
+            </Grid>
+        </Border>
+    </Grid>
 </Page>

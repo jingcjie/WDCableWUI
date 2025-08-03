@@ -9,14 +9,14 @@ namespace WDCableWUI.Services
     /// </summary>
     public static class ServiceManager
     {
-        private static WiFiDirectService _wifiDirectService;
+        private static WiFiDirectService? _wifiDirectService;
         private static readonly object _lock = new object();
         private static bool _isInitialized = false;
         
         /// <summary>
         /// Gets the singleton WiFiDirectService instance.
         /// </summary>
-        public static WiFiDirectService WiFiDirectService
+        public static WiFiDirectService? WiFiDirectService
         {
             get
             {
@@ -32,7 +32,12 @@ namespace WDCableWUI.Services
         /// Gets the current ConnectionService instance managed by WiFiDirectService.
         /// Returns null if no WiFi Direct connection is established.
         /// </summary>
-        public static ConnectionService ConnectionService => _wifiDirectService?.ConnectionService;
+        public static ConnectionService? ConnectionService => _wifiDirectService?.ConnectionService;
+        
+        /// <summary>
+        /// Gets the singleton ChatService instance.
+        /// </summary>
+        public static ChatService ChatService => ChatService.Instance;
         
         /// <summary>
         /// Gets whether the ServiceManager has been initialized.
@@ -79,6 +84,10 @@ namespace WDCableWUI.Services
                 
                 try
                 {
+                    // Dispose ChatService first
+                    ChatService.ResetInstance();
+                    
+                    // Then dispose WiFiDirectService
                     _wifiDirectService?.Dispose();
                     _wifiDirectService = null;
                     _isInitialized = false;

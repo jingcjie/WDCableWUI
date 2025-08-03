@@ -14,11 +14,11 @@ namespace WDCableWUI.Services
 {
     public class WiFiDirectDevice
     {
-        public string Id { get; set; }
-        public string Name { get; set; }
-        public DeviceInformation DeviceInfo { get; set; }
+        public string Id { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        public DeviceInformation? DeviceInfo { get; set; }
         public bool IsConnected { get; set; }
-        public string Status { get; set; }
+        public string Status { get; set; } = string.Empty;
     }
 
     public class ConnectionRequestEventArgs : EventArgs
@@ -35,30 +35,30 @@ namespace WDCableWUI.Services
 
     public class WiFiDirectService
     {
-        private WiFiDirectAdvertisementPublisher _publisher;
-        private DeviceWatcher _deviceWatcher;
-        private WiFiDirectDevice _connectedDevice;
-        private WiFiDirectConnectionListener _connectionListener;
-        private Windows.Devices.WiFiDirect.WiFiDirectDevice _wifiDirectDevice;
+        private WiFiDirectAdvertisementPublisher? _publisher;
+        private DeviceWatcher? _deviceWatcher;
+        private WiFiDirectDevice? _connectedDevice;
+        private WiFiDirectConnectionListener? _connectionListener;
+        private Windows.Devices.WiFiDirect.WiFiDirectDevice? _wifiDirectDevice;
         private readonly DispatcherQueue _dispatcherQueue;
-        private ConnectionService _connectionService;
+        private ConnectionService? _connectionService;
         
         public ObservableCollection<WiFiDirectDevice> DiscoveredDevices { get; }
         public bool IsAdvertising { get; private set; }
         public bool IsScanning { get; private set; }
         public bool IsConnected => _connectedDevice != null;
-        public WiFiDirectDevice ConnectedDevice => _connectedDevice;
+        public WiFiDirectDevice? ConnectedDevice => _connectedDevice;
         public bool IsGroupOwner { get; private set; }
-        public string LocalIP { get; private set; }
-        public string RemoteIP { get; private set; }
-        public ConnectionService ConnectionService => _connectionService;
+        public string? LocalIP { get; private set; }
+        public string? RemoteIP { get; private set; }
+        public ConnectionService? ConnectionService => _connectionService;
         
-        public event EventHandler<WiFiDirectDevice> DeviceDiscovered;
-        public event EventHandler<WiFiDirectDevice> DeviceConnected;
-        public event EventHandler DeviceDisconnected;
-        public event EventHandler<string> StatusChanged;
-        public event EventHandler<string> ErrorOccurred;
-        public event EventHandler<ConnectionRequestEventArgs> ConnectionRequested;
+        public event EventHandler<WiFiDirectDevice>? DeviceDiscovered;
+        public event EventHandler<WiFiDirectDevice>? DeviceConnected;
+        public event EventHandler? DeviceDisconnected;
+        public event EventHandler<string>? StatusChanged;
+        public event EventHandler<string>? ErrorOccurred;
+        public event EventHandler<ConnectionRequestEventArgs>? ConnectionRequested;
 
         public WiFiDirectService()
         {
@@ -66,11 +66,11 @@ namespace WDCableWUI.Services
             _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
         }
 
-        public async Task<bool> StartAdvertisingAsync(string deviceName = "WDCableWUI Device")
+        public Task<bool> StartAdvertisingAsync(string deviceName = "WDCableWUI Device")
         {
             try
             {
-                if (IsAdvertising) return true;
+                if (IsAdvertising) return Task.FromResult(true);
 
                 _publisher = new WiFiDirectAdvertisementPublisher();
                 _publisher.Advertisement.ListenStateDiscoverability = WiFiDirectAdvertisementListenStateDiscoverability.Normal;
@@ -91,12 +91,12 @@ namespace WDCableWUI.Services
                 IsAdvertising = true;
                 
                 OnStatusChanged("Device is now discoverable");
-                return true;
+                return Task.FromResult(true);
             }
             catch (Exception ex)
             {
                 OnErrorOccurred($"Failed to start advertising: {ex.Message}");
-                return false;
+                return Task.FromResult(false);
             }
         }
 
@@ -120,11 +120,11 @@ namespace WDCableWUI.Services
             }
         }
 
-        public async Task<bool> StartScanningAsync()
+        public Task<bool> StartScanningAsync()
         {
             try
             {
-                if (IsScanning) return true;
+                if (IsScanning) return Task.FromResult(true);
                 var deviceSelector = Windows.Devices.WiFiDirect.WiFiDirectDevice.GetDeviceSelector(WiFiDirectDeviceSelectorType.AssociationEndpoint);
                 _deviceWatcher = DeviceInformation.CreateWatcher(deviceSelector);
                 
@@ -137,12 +137,12 @@ namespace WDCableWUI.Services
                 IsScanning = true;
                 
                 OnStatusChanged("Scanning for WiFi Direct devices...");
-                return true;
+                return Task.FromResult(true);
             }
             catch (Exception ex)
             {
                 OnErrorOccurred($"Failed to start scanning: {ex.Message}");
-                return false;
+                return Task.FromResult(false);
             }
         }
 
@@ -209,7 +209,7 @@ namespace WDCableWUI.Services
             }
         }
 
-        public async Task DisconnectAsync()
+        public Task DisconnectAsync()
         {
             try
             {
@@ -240,6 +240,8 @@ namespace WDCableWUI.Services
             {
                 OnErrorOccurred($"Disconnect error: {ex.Message}");
             }
+            
+            return Task.CompletedTask;
         }
 
         private void OnConnectionStatusChanged(Windows.Devices.WiFiDirect.WiFiDirectDevice sender, object args)
@@ -252,60 +254,46 @@ namespace WDCableWUI.Services
                 else if (sender.ConnectionStatus == WiFiDirectConnectionStatus.Disconnected)
                 {
                     OnStatusChanged("WiFi Direct connection lost");
-                    DisconnectInternal();
+                    _ = DisconnectAsync();
                 }
             });
         }
         
-        private void DisconnectInternal()
-        {
-            if (_connectedDevice != null)
-            {
-                // Dispose ConnectionService first
-                DisposeConnectionService();
-                
-                _connectedDevice.IsConnected = false;
-                _connectedDevice = null;
-                
-                if (_wifiDirectDevice != null)
-                {
-                    _wifiDirectDevice.ConnectionStatusChanged -= OnConnectionStatusChanged;
-                    _wifiDirectDevice.Dispose();
-                    _wifiDirectDevice = null;
-                }
-                
-                IsGroupOwner = false;
-                LocalIP = null;
-                RemoteIP = null;
-                OnDeviceDisconnected();
-                OnStatusChanged("Disconnected");
-            }
-        }
 
-        private async Task DetermineGroupOwnerAsync(Windows.Devices.WiFiDirect.WiFiDirectDevice wifiDirectDevice)
+
+        private Task DetermineGroupOwnerAsync(Windows.Devices.WiFiDirect.WiFiDirectDevice wifiDirectDevice)
         {
             try
             {
+                System.Diagnostics.Debug.WriteLine("[WiFiDirectService] DetermineGroupOwnerAsync called");
                 // Determine group owner status by analyzing IP addresses
                 var endpointPairs = wifiDirectDevice.GetConnectionEndpointPairs();
+                System.Diagnostics.Debug.WriteLine($"[WiFiDirectService] Found {endpointPairs.Count} endpoint pairs");
+                
                 if (endpointPairs.Count > 0)
                 {
                     LocalIP = endpointPairs[0].LocalHostName.ToString();
                     RemoteIP = endpointPairs[0].RemoteHostName.ToString();
                     
+                    System.Diagnostics.Debug.WriteLine($"[WiFiDirectService] LocalIP: {LocalIP}, RemoteIP: {RemoteIP}");
+                    
                     IsGroupOwner = DetermineGroupOwnerStatus(LocalIP, RemoteIP);
+                    System.Diagnostics.Debug.WriteLine($"[WiFiDirectService] IsGroupOwner determined as: {IsGroupOwner}");
                 }
                 else
                 {
+                    System.Diagnostics.Debug.WriteLine("[WiFiDirectService] No connection endpoints available");
                     OnErrorOccurred("Warning: No connection endpoints available for group owner detection");
                 }
             }
             catch (Exception ex)
             {
+                System.Diagnostics.Debug.WriteLine($"[WiFiDirectService] DetermineGroupOwnerAsync exception: {ex.Message}");
                 OnErrorOccurred($"Error determining group owner: {ex.Message}");
                 IsGroupOwner = false;
             }
             
+            return Task.CompletedTask;
         }
 
 
@@ -353,9 +341,10 @@ namespace WDCableWUI.Services
         
         private async void OnConnectionRequested(WiFiDirectConnectionListener sender, WiFiDirectConnectionRequestedEventArgs args)
         {
+            WiFiDirectConnectionRequest? request = null;
             try
             {
-                var request = args.GetConnectionRequest();
+                request = args.GetConnectionRequest();
                 var deviceInfo = request.DeviceInformation;
                 
                 OnStatusChanged($"Connection request from {deviceInfo.Name}");
@@ -376,8 +365,21 @@ namespace WDCableWUI.Services
                 // Raise the event on UI thread
                 _dispatcherQueue.TryEnqueue(() => OnConnectionRequested(connectionRequestArgs));
                 
-                // Wait for user response
-                bool userAccepted = await connectionRequestArgs.ResponseTask.Task;
+                // Wait for user response with timeout
+                var timeoutTask = Task.Delay(TimeSpan.FromSeconds(60));
+                var completedTask = await Task.WhenAny(connectionRequestArgs.ResponseTask.Task, timeoutTask);
+                
+                bool userAccepted = false;
+                if (completedTask == connectionRequestArgs.ResponseTask.Task)
+                {
+                    userAccepted = await connectionRequestArgs.ResponseTask.Task;
+                }
+                else
+                {
+                    // Timeout occurred
+                    OnStatusChanged($"Connection request from {deviceInfo.Name} timed out");
+                    connectionRequestArgs.ResponseTask.TrySetResult(false);
+                }
                 
                 if (userAccepted)
                 {
@@ -416,6 +418,11 @@ namespace WDCableWUI.Services
             catch (Exception ex)
             {
                 OnErrorOccurred($"Error handling connection request: {ex.Message}");
+            }
+            finally
+            {
+                // Properly dispose of the connection request to prevent resource leaks
+                request?.Dispose();
             }
         }
 
@@ -480,6 +487,7 @@ namespace WDCableWUI.Services
 
         protected virtual void OnDeviceConnected(WiFiDirectDevice device)
         {
+            System.Diagnostics.Debug.WriteLine($"[WiFiDirectService] OnDeviceConnected called for device: {device?.Name}");
             DeviceConnected?.Invoke(this, device);
         }
 
@@ -503,22 +511,27 @@ namespace WDCableWUI.Services
             ConnectionRequested?.Invoke(this, args);
         }
         
-        private async Task CreateConnectionServiceAsync()
+        private Task CreateConnectionServiceAsync()
         {
             try
             {
+                System.Diagnostics.Debug.WriteLine("[WiFiDirectService] CreateConnectionServiceAsync called");
                 // Dispose existing ConnectionService if any
                 DisposeConnectionService();
                 
                 // Create new ConnectionService
                 _connectionService = new ConnectionService(this);
+                System.Diagnostics.Debug.WriteLine("[WiFiDirectService] ConnectionService created successfully");
                 
                 OnStatusChanged("ConnectionService created and ready for initialization");
             }
             catch (Exception ex)
             {
+                System.Diagnostics.Debug.WriteLine($"[WiFiDirectService] CreateConnectionServiceAsync exception: {ex.Message}");
                 OnErrorOccurred($"Failed to create ConnectionService: {ex.Message}");
             }
+            
+            return Task.CompletedTask;
         }
         
         private void DisposeConnectionService()
