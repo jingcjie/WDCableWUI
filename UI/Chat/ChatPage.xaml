@@ -142,7 +142,7 @@
                 </StackPanel>
                 
                 <!-- Disabled Overlay -->
-                <Border x:Name="DisabledOverlay"
+                <!-- <Border x:Name="DisabledOverlay"
                        Background="{ThemeResource LayerFillColorDefaultBrush}"
                        Opacity="0.8"
                        Visibility="Collapsed">
@@ -163,7 +163,7 @@
                                   HorizontalAlignment="Center"
                                   TextAlignment="Center"/>
                     </StackPanel>
-                </Border>
+                </Border> -->
             </Grid>
         </Border>
 

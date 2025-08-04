@@ -25,42 +25,320 @@
                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
             </StackPanel>
 
-            <!-- Content Area -->
-            <Border Grid.Row="1"
-                   Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                   BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                   BorderThickness="1"
-                   CornerRadius="8"
-                   Padding="24">
-                
-                <StackPanel Spacing="16" HorizontalAlignment="Center" VerticalAlignment="Center">
-                    <FontIcon FontFamily="{StaticResource SymbolThemeFontFamily}"
-                             Glyph="&#xE8B5;"
-                             FontSize="48"
-                             Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
+            <!-- Main Content -->
+            <Grid Grid.Row="1">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="2*"/>
+                    <ColumnDefinition Width="12"/>
+                    <ColumnDefinition Width="1*"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Left Panel - Send/Receive -->
+                <StackPanel Grid.Column="0" Spacing="16">
                     
-                    <TextBlock Text="File Transfer"
-                              Style="{StaticResource TitleTextBlockStyle}"
-                              HorizontalAlignment="Center"/>
+                    <!-- Send Files Section -->
+                    <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                           BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                           BorderThickness="1"
+                           CornerRadius="8"
+                           Padding="20">
+                        <StackPanel Spacing="16">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon FontFamily="{StaticResource SymbolThemeFontFamily}"
+                                         Glyph="&#xE8B5;"
+                                         FontSize="20"
+                                         Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
+                                <TextBlock Text="Send Files"
+                                          Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                            </StackPanel>
+                            
+                            <!-- Drag and Drop Area -->
+                            <Border x:Name="DropArea"
+                                   Background="{ThemeResource SubtleFillColorTransparentBrush}"
+                                   BorderBrush="{ThemeResource AccentFillColorDefaultBrush}"
+                                   BorderThickness="2"
+                                   CornerRadius="8"
+                                   Height="120"
+                                   AllowDrop="True"
+                                   DragOver="DropArea_DragOver"
+                                   Drop="DropArea_Drop">
+                                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8">
+                                    <FontIcon FontFamily="{StaticResource SymbolThemeFontFamily}"
+                                             Glyph="&#xE8E5;"
+                                             FontSize="24"
+                                             Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                    <TextBlock Text="Drag files here or click to browse"
+                                              Style="{StaticResource CaptionTextBlockStyle}"
+                                              Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                </StackPanel>
+                            </Border>
+                            
+                            <!-- File Selection Buttons -->
+                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                <Button x:Name="BrowseFilesButton"
+                                       Content="Browse Files"
+                                       Style="{StaticResource AccentButtonStyle}"
+                                       Click="BrowseFilesButton_Click">
+                                    <Button.Template>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border Background="{TemplateBinding Background}"
+                                                   BorderBrush="{TemplateBinding BorderBrush}"
+                                                   BorderThickness="{TemplateBinding BorderThickness}"
+                                                   CornerRadius="4"
+                                                   Padding="16,8">
+                                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                                    <FontIcon FontFamily="{StaticResource SymbolThemeFontFamily}"
+                                                             Glyph="&#xE8E5;"
+                                                             FontSize="16"/>
+                                                    <ContentPresenter/>
+                                                </StackPanel>
+                                            </Border>
+                                        </ControlTemplate>
+                                    </Button.Template>
+                                </Button>
+                                
+                                <Button x:Name="BrowseFolderButton"
+                                       Content="Browse Folder"
+                                       Click="BrowseFolderButton_Click">
+                                    <Button.Template>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border Background="{TemplateBinding Background}"
+                                                   BorderBrush="{TemplateBinding BorderBrush}"
+                                                   BorderThickness="{TemplateBinding BorderThickness}"
+                                                   CornerRadius="4"
+                                                   Padding="16,8">
+                                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                                    <FontIcon FontFamily="{StaticResource SymbolThemeFontFamily}"
+                                                             Glyph="&#xE8B7;"
+                                                             FontSize="16"/>
+                                                    <ContentPresenter/>
+                                                </StackPanel>
+                                            </Border>
+                                        </ControlTemplate>
+                                    </Button.Template>
+                                </Button>
+                            </StackPanel>
+                            
+                            <!-- Selected Files List -->
+                            <StackPanel x:Name="SelectedFilesPanel" Spacing="8" Visibility="Collapsed">
+                                <TextBlock Text="Selected Files:"
+                                          Style="{StaticResource CaptionTextBlockStyle}"
+                                          Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                <ListView x:Name="SelectedFilesList"
+                                         MaxHeight="120"
+                                         Background="{ThemeResource ControlFillColorDefaultBrush}"
+                                         CornerRadius="4"
+                                         Padding="8">
+                                    <ListView.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <FontIcon Grid.Column="0"
+                                                         FontFamily="{StaticResource SymbolThemeFontFamily}"
+                                                         Glyph="&#xE8A5;"
+                                                         FontSize="16"
+                                                         Margin="0,0,8,0"/>
+                                                <TextBlock Grid.Column="1"
+                                                          Text="{Binding Name}"
+                                                          VerticalAlignment="Center"/>
+                                                <Button Grid.Column="2"
+                                                       Content="&#xE711;"
+                                                       FontFamily="{StaticResource SymbolThemeFontFamily}"
+                                                       FontSize="12"
+                                                       Background="Transparent"
+                                                       BorderThickness="0"
+                                                       Padding="4"
+                                                       Click="RemoveFileButton_Click"
+                                                       Tag="{Binding}"/>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ListView.ItemTemplate>
+                                </ListView>
+                                
+                                <Button x:Name="SendFilesButton"
+                                       Content="Send Files"
+                                       Style="{StaticResource AccentButtonStyle}"
+                                       HorizontalAlignment="Left"
+                                       Click="SendFilesButton_Click">
+                                    <Button.Template>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border Background="{TemplateBinding Background}"
+                                                   BorderBrush="{TemplateBinding BorderBrush}"
+                                                   BorderThickness="{TemplateBinding BorderThickness}"
+                                                   CornerRadius="4"
+                                                   Padding="16,8">
+                                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                                    <FontIcon FontFamily="{StaticResource SymbolThemeFontFamily}"
+                                                             Glyph="&#xE724;"
+                                                             FontSize="16"/>
+                                                    <ContentPresenter/>
+                                                </StackPanel>
+                                            </Border>
+                                        </ControlTemplate>
+                                    </Button.Template>
+                                </Button>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
                     
-                    <TextBlock Text="File transfer UI will be implemented here"
-                              Style="{StaticResource BodyTextBlockStyle}"
-                              Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                              HorizontalAlignment="Center"/>
-                    
-                    <TextBlock Text="Features to include:"
-                              Style="{StaticResource BodyStrongTextBlockStyle}"
-                              Margin="0,16,0,8"/>
-                    
-                    <StackPanel Spacing="8">
-                        <TextBlock Text="• Drag and drop file sending"/>
-                        <TextBlock Text="• File browser for selection"/>
-                        <TextBlock Text="• Transfer progress tracking"/>
-                        <TextBlock Text="• Transfer history"/>
-                        <TextBlock Text="• Resume interrupted transfers"/>
-                    </StackPanel>
+                    <!-- Receive Settings Section -->
+                    <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                           BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                           BorderThickness="1"
+                           CornerRadius="8"
+                           Padding="20">
+                        <StackPanel Spacing="16">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon FontFamily="{StaticResource SymbolThemeFontFamily}"
+                                         Glyph="&#xE896;"
+                                         FontSize="20"
+                                         Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
+                                <TextBlock Text="Receive Settings"
+                                          Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                            </StackPanel>
+                            
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="Download Location:"
+                                          Style="{StaticResource CaptionTextBlockStyle}"/>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox x:Name="DownloadLocationTextBox"
+                                            Grid.Column="0"
+                                            IsReadOnly="True"
+                                            Margin="0,0,8,0"/>
+                                    <Button x:Name="BrowseDownloadLocationButton"
+                                           Grid.Column="1"
+                                           Content="Browse"
+                                           Click="BrowseDownloadLocationButton_Click"/>
+                                </Grid>
+                            </StackPanel>
+                            
+                            <CheckBox x:Name="AutoAcceptFilesCheckBox"
+                                     Content="Automatically accept incoming files"
+                                     IsChecked="False"/>
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
-            </Border>
+
+                <!-- Right Panel - Transfer Records -->
+                <Border Grid.Column="2"
+                       Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                       BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                       BorderThickness="1"
+                       CornerRadius="8"
+                       Padding="20">
+                    <StackPanel Spacing="16">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon FontFamily="{StaticResource SymbolThemeFontFamily}"
+                                     Glyph="&#xE81C;"
+                                     FontSize="20"
+                                     Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
+                            <TextBlock Text="Transfer Records"
+                                      Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                        </StackPanel>
+                        
+                        <!-- Filter Buttons -->
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <ToggleButton x:Name="ShowAllToggle"
+                                         Content="All"
+                                         IsChecked="True"
+                                         Click="FilterToggle_Click"
+                                         Tag="All"/>
+                            <ToggleButton x:Name="ShowSentToggle"
+                                         Content="Sent"
+                                         Click="FilterToggle_Click"
+                                         Tag="Sent"/>
+                            <ToggleButton x:Name="ShowReceivedToggle"
+                                         Content="Received"
+                                         Click="FilterToggle_Click"
+                                         Tag="Received"/>
+                        </StackPanel>
+                        
+                        <!-- Transfer Records List -->
+                        <ListView x:Name="TransferRecordsList"
+                                 Background="{ThemeResource ControlFillColorDefaultBrush}"
+                                 CornerRadius="4"
+                                 Padding="8"
+                                 MinHeight="300">
+                            <ListView.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Background="{ThemeResource SubtleFillColorTransparentBrush}"
+                                           CornerRadius="4"
+                                           Padding="12"
+                                           Margin="0,2">
+                                        <StackPanel Spacing="4">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                
+                                                <FontIcon Grid.Column="0"
+                                                         FontFamily="{StaticResource SymbolThemeFontFamily}"
+                                                         Glyph="{Binding TypeIcon}"
+                                                         FontSize="14"
+                                                         Foreground="{Binding StatusColor}"
+                                                         Margin="0,0,8,0"/>
+                                                
+                                                <TextBlock Grid.Column="1"
+                                                          Text="{Binding FileName}"
+                                                          Style="{StaticResource CaptionTextBlockStyle}"
+                                                          TextTrimming="CharacterEllipsis"/>
+                                                
+                                                <TextBlock Grid.Column="2"
+                                                          Text="{Binding Status}"
+                                                          Style="{StaticResource CaptionTextBlockStyle}"
+                                                          Foreground="{Binding StatusColor}"/>
+                                            </Grid>
+                                            
+                                            <TextBlock Text="{Binding TimeStamp}"
+                                                      Style="{StaticResource CaptionTextBlockStyle}"
+                                                      Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                                      FontSize="10"/>
+                                            
+                                            <ProgressBar Value="{Binding Progress}"
+                                                        Maximum="100"
+                                                        Height="4"
+                                                        Visibility="{Binding ProgressVisibility}"/>
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ListView.ItemTemplate>
+                        </ListView>
+                        
+                        <!-- Clear Records Button -->
+                        <Button x:Name="ClearRecordsButton"
+                               Content="Clear All Records"
+                               HorizontalAlignment="Stretch"
+                               Click="ClearRecordsButton_Click">
+                            <Button.Template>
+                                <ControlTemplate TargetType="Button">
+                                    <Border Background="{TemplateBinding Background}"
+                                           BorderBrush="{TemplateBinding BorderBrush}"
+                                           BorderThickness="{TemplateBinding BorderThickness}"
+                                           CornerRadius="4"
+                                           Padding="12,8">
+                                        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
+                                            <FontIcon FontFamily="{StaticResource SymbolThemeFontFamily}"
+                                                     Glyph="&#xE74D;"
+                                                     FontSize="14"/>
+                                            <ContentPresenter/>
+                                        </StackPanel>
+                                    </Border>
+                                </ControlTemplate>
+                            </Button.Template>
+                        </Button>
+                    </StackPanel>
+                </Border>
+            </Grid>
         </Grid>
     </ScrollViewer>
 </Page>

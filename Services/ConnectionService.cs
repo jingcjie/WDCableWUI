@@ -10,7 +10,10 @@ namespace WDCableWUI.Services
 {
     public class ConnectionService
     {
-        private readonly WiFiDirectService _wifiDirectService;
+        private static ConnectionService? _instance;
+        private static readonly object _lock = new object();
+        
+        private WiFiDirectService? _wifiDirectService;
         private readonly DispatcherQueue _dispatcherQueue;
         
         // TCP connections
@@ -43,15 +46,54 @@ namespace WDCableWUI.Services
         // Properties
         public bool IsInitialized => _isInitialized;
         public bool IsGroupOwner => _wifiDirectService?.IsGroupOwner ?? false;
+        public bool IsConnected => _wifiDirectService?.IsConnected ?? false;
         public TcpClient? ChatConnection => _chatClient;
         public TcpClient? SpeedTestConnection => _speedTestClient;
         public TcpClient? FileConnection => _fileClient;
         
-        public ConnectionService(WiFiDirectService wifiDirectService)
+        private ConnectionService()
         {
-            _wifiDirectService = wifiDirectService ?? throw new ArgumentNullException(nameof(wifiDirectService));
             _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
             _cancellationTokenSource = new CancellationTokenSource();
+        }
+        
+        public static ConnectionService Instance
+        {
+            get
+            {
+                if (_instance == null)
+                {
+                    lock (_lock)
+                    {
+                        if (_instance == null)
+                        {
+                            _instance = new ConnectionService();
+                        }
+                    }
+                }
+                return _instance;
+            }
+        }
+        
+        public static void ResetInstance()
+        {
+            lock (_lock)
+            {
+                _instance?.Dispose();
+                _instance = null;
+            }
+        }
+        
+        public void Initialize(WiFiDirectService wifiDirectService)
+        {
+            if (_wifiDirectService != null)
+            {
+                // Unsubscribe from previous service
+                _wifiDirectService.DeviceConnected -= OnWiFiDirectConnected;
+                _wifiDirectService.DeviceDisconnected -= OnWiFiDirectDisconnected;
+            }
+            
+            _wifiDirectService = wifiDirectService ?? throw new ArgumentNullException(nameof(wifiDirectService));
             
             // Subscribe to WiFi Direct events
             _wifiDirectService.DeviceConnected += OnWiFiDirectConnected;
@@ -62,13 +104,11 @@ namespace WDCableWUI.Services
         {
             try
             {
-                System.Diagnostics.Debug.WriteLine("[ConnectionService] OnWiFiDirectConnected called");
                 OnStatusChanged("WiFi Direct connected. Initializing TCP connections...");
                 await InitializeConnectionsAsync();
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[ConnectionService] OnWiFiDirectConnected exception: {ex.Message}");
                 OnErrorOccurred($"Failed to initialize connections: {ex.Message}");
             }
         }
@@ -81,19 +121,14 @@ namespace WDCableWUI.Services
         
         public async Task InitializeConnectionsAsync()
         {
-            System.Diagnostics.Debug.WriteLine($"[ConnectionService] InitializeConnectionsAsync called. IsInitialized: {_isInitialized}");
-            
             if (_isInitialized)
             {
-                System.Diagnostics.Debug.WriteLine("[ConnectionService] Already initialized, returning");
                 OnStatusChanged("Connections already initialized.");
                 return;
             }
             
-            System.Diagnostics.Debug.WriteLine($"[ConnectionService] WiFi Direct IsConnected: {_wifiDirectService.IsConnected}");
-            if (!_wifiDirectService.IsConnected)
+            if (_wifiDirectService == null || !_wifiDirectService.IsConnected)
             {
-                System.Diagnostics.Debug.WriteLine("[ConnectionService] WiFi Direct not connected, throwing exception");
                 throw new InvalidOperationException("WiFi Direct must be connected before initializing TCP connections.");
             }
             
@@ -101,31 +136,25 @@ namespace WDCableWUI.Services
             {
                 _cancellationTokenSource = new CancellationTokenSource();
                 
-                System.Diagnostics.Debug.WriteLine($"[ConnectionService] IsGroupOwner: {_wifiDirectService.IsGroupOwner}");
-                if (_wifiDirectService.IsGroupOwner)
+                if (_wifiDirectService?.IsGroupOwner == true)
                 {
-                    System.Diagnostics.Debug.WriteLine("[ConnectionService] Starting TCP servers as Group Owner");
                     OnStatusChanged("Device is Group Owner. Starting TCP servers...");
                     await StartServersAsync();
                     // For Group Owner, ConnectionsEstablished will be fired when all clients connect
                 }
                 else
                 {
-                    System.Diagnostics.Debug.WriteLine("[ConnectionService] Connecting to TCP servers as Client");
                     OnStatusChanged("Device is Client. Connecting to TCP servers...");
                     await ConnectToServersAsync();
                     // For Client, all connections are established immediately
-                    System.Diagnostics.Debug.WriteLine("[ConnectionService] All client connections established, firing ConnectionsEstablished event");
                     OnStatusChanged("All TCP connections established - Services are now available");
                     ConnectionsEstablished?.Invoke(this, EventArgs.Empty);
                 }
                 
                 _isInitialized = true;
-                System.Diagnostics.Debug.WriteLine("[ConnectionService] InitializeConnectionsAsync completed successfully");
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[ConnectionService] InitializeConnectionsAsync exception: {ex.Message}");
                 OnErrorOccurred($"Failed to initialize connections: {ex.Message}");
                 CleanupConnections();
                 throw;
@@ -134,53 +163,40 @@ namespace WDCableWUI.Services
         
         private Task StartServersAsync()
         {
-            System.Diagnostics.Debug.WriteLine($"[ConnectionService] StartServersAsync called. LocalIP: {_wifiDirectService.LocalIP}");
-            
-            if (string.IsNullOrEmpty(_wifiDirectService.LocalIP))
+            if (string.IsNullOrEmpty(_wifiDirectService?.LocalIP))
             {
-                System.Diagnostics.Debug.WriteLine("[ConnectionService] Local IP is null or empty, throwing exception");
                 throw new InvalidOperationException("Local IP is not available");
             }
                 
             var localEndPoint = new IPEndPoint(IPAddress.Parse(_wifiDirectService.LocalIP), 0);
-            System.Diagnostics.Debug.WriteLine($"[ConnectionService] Local endpoint created: {localEndPoint.Address}");
             
             try
             {
                 // Start Chat Server
-                System.Diagnostics.Debug.WriteLine($"[ConnectionService] Starting Chat server on {localEndPoint.Address}:{CHAT_PORT}");
                 _chatServer = new TcpListener(localEndPoint.Address, CHAT_PORT);
                 _chatServer.Start();
-                System.Diagnostics.Debug.WriteLine($"[ConnectionService] Chat server started successfully");
                 OnStatusChanged($"Chat server started on {localEndPoint.Address}:{CHAT_PORT}");
                 
                 // Start Speed Test Server
-                System.Diagnostics.Debug.WriteLine($"[ConnectionService] Starting SpeedTest server on {localEndPoint.Address}:{SPEED_TEST_PORT}");
                 _speedTestServer = new TcpListener(localEndPoint.Address, SPEED_TEST_PORT);
                 _speedTestServer.Start();
-                System.Diagnostics.Debug.WriteLine($"[ConnectionService] SpeedTest server started successfully");
                 OnStatusChanged($"Speed test server started on {localEndPoint.Address}:{SPEED_TEST_PORT}");
                 
                 // Start File Server
-                System.Diagnostics.Debug.WriteLine($"[ConnectionService] Starting File server on {localEndPoint.Address}:{FILE_PORT}");
                 _fileServer = new TcpListener(localEndPoint.Address, FILE_PORT);
                 _fileServer.Start();
-                System.Diagnostics.Debug.WriteLine($"[ConnectionService] File server started successfully");
                 OnStatusChanged($"File server started on {localEndPoint.Address}:{FILE_PORT}");
                 
                 // Accept connections asynchronously
                 var token = _cancellationTokenSource?.Token ?? CancellationToken.None;
-                System.Diagnostics.Debug.WriteLine($"[ConnectionService] Starting async connection acceptance tasks");
                 _ = Task.Run(() => AcceptConnectionsAsync(_chatServer, "Chat", (client) => _chatClient = client), token);
                 _ = Task.Run(() => AcceptConnectionsAsync(_speedTestServer, "SpeedTest", (client) => _speedTestClient = client), token);
                 _ = Task.Run(() => AcceptConnectionsAsync(_fileServer, "File", (client) => _fileClient = client), token);
                 
-                System.Diagnostics.Debug.WriteLine($"[ConnectionService] All servers started and async tasks launched");
                 return Task.CompletedTask;
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[ConnectionService] StartServersAsync exception: {ex.Message}");
                 throw;
             }
         }
@@ -189,16 +205,13 @@ namespace WDCableWUI.Services
         {
             try
             {
-                System.Diagnostics.Debug.WriteLine($"[ConnectionService] AcceptConnectionsAsync started for {serviceName}");
                 while (!(_cancellationTokenSource?.Token.IsCancellationRequested ?? true))
                 {
-                    System.Diagnostics.Debug.WriteLine($"[ConnectionService] Waiting for {serviceName} client connection...");
                     OnStatusChanged($"Waiting for {serviceName} client connection...");
                     var client = await server.AcceptTcpClientAsync();
                     
                     if (client != null)
                     {
-                        System.Diagnostics.Debug.WriteLine($"[ConnectionService] {serviceName} client connected from {client.Client.RemoteEndPoint}");
                         setClient(client);
                         OnStatusChanged($"{serviceName} client connected from {client.Client.RemoteEndPoint}");
                         
@@ -209,34 +222,28 @@ namespace WDCableWUI.Services
                             else if (serviceName == "SpeedTest") _speedTestConnected = true;
                             else if (serviceName == "File") _fileConnected = true;
                             
-                            System.Diagnostics.Debug.WriteLine($"[ConnectionService] Connection status - Chat: {_chatConnected}, SpeedTest: {_speedTestConnected}, File: {_fileConnected}");
-                            
                             if (_chatConnected && _speedTestConnected && _fileConnected)
                             {
-                                System.Diagnostics.Debug.WriteLine("[ConnectionService] All connections established, firing ConnectionsEstablished event");
                                 OnStatusChanged("All TCP connections established - Services are now available");
                                 ConnectionsEstablished?.Invoke(this, EventArgs.Empty);
                             }
                         }
                     }
                 }
-                System.Diagnostics.Debug.WriteLine($"[ConnectionService] AcceptConnectionsAsync loop ended for {serviceName} (cancellation requested)");
             }
             catch (ObjectDisposedException)
             {
-                System.Diagnostics.Debug.WriteLine($"[ConnectionService] AcceptConnectionsAsync for {serviceName}: Server was disposed (expected)");
                 // Server was stopped, this is expected
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[ConnectionService] AcceptConnectionsAsync for {serviceName} exception: {ex.Message}");
                 OnErrorOccurred($"Error accepting {serviceName} connections: {ex.Message}");
             }
         }
         
         private async Task ConnectToServersAsync()
         {
-            var remoteIP = _wifiDirectService.RemoteIP;
+            var remoteIP = _wifiDirectService?.RemoteIP;
             if (string.IsNullOrEmpty(remoteIP))
             {
                 throw new InvalidOperationException("Remote IP is not available for connection");
@@ -272,10 +279,9 @@ namespace WDCableWUI.Services
                 }
                 catch (Exception ex)
                 {
-                    OnStatusChanged($"Failed to connect to {serviceName} server (attempt {attempt}/{maxRetries}): {ex.Message}");
-                    
                     if (attempt < maxRetries)
                     {
+                        OnStatusChanged($"Connection to {serviceName} failed, retrying in {retryDelay.TotalSeconds} seconds...");
                         await Task.Delay(retryDelay, _cancellationTokenSource?.Token ?? CancellationToken.None);
                     }
                     else

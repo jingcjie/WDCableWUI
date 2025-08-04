@@ -10,6 +10,9 @@ namespace WDCableWUI.Services
     public static class ServiceManager
     {
         private static WiFiDirectService? _wifiDirectService;
+        private static ConnectionService? _connectionService;
+        private static ChatService? _chatService;
+        private static SpeedTestService? _speedTestService;
         private static readonly object _lock = new object();
         private static bool _isInitialized = false;
         
@@ -29,15 +32,49 @@ namespace WDCableWUI.Services
         }
         
         /// <summary>
-        /// Gets the current ConnectionService instance managed by WiFiDirectService.
-        /// Returns null if no WiFi Direct connection is established.
+        /// Gets the singleton ConnectionService instance.
         /// </summary>
-        public static ConnectionService? ConnectionService => _wifiDirectService?.ConnectionService;
+        public static ConnectionService? ConnectionService
+        {
+            get
+            {
+                if (!_isInitialized)
+                {
+                    throw new InvalidOperationException("ServiceManager must be initialized before accessing services. Call Initialize() first.");
+                }
+                return _connectionService;
+            }
+        }
         
         /// <summary>
-        /// Gets the singleton ChatService instance.
+        /// Gets the ChatService instance.
         /// </summary>
-        public static ChatService ChatService => ChatService.Instance;
+        public static ChatService? ChatService
+        {
+            get
+            {
+                if (!_isInitialized)
+                {
+                    throw new InvalidOperationException("ServiceManager must be initialized before accessing services. Call Initialize() first.");
+                }
+                return _chatService;
+            }
+        }
+        
+        /// <summary>
+        /// Gets the SpeedTestService instance.
+        /// </summary>
+        public static SpeedTestService? SpeedTestService
+        {
+            get
+            {
+                if (!_isInitialized)
+                {
+                    throw new InvalidOperationException("ServiceManager must be initialized before accessing services. Call Initialize() first.");
+                }
+                return _speedTestService;
+            }
+        }
         
         /// <summary>
         /// Gets whether the ServiceManager has been initialized.
@@ -60,13 +97,38 @@ namespace WDCableWUI.Services
                 try
                 {
                     _wifiDirectService = new WiFiDirectService();
+                    _connectionService = ConnectionService.Instance;
+                    
+                    // Initialize ConnectionService with WiFiDirectService
+                    _connectionService.Initialize(_wifiDirectService);
+                    
+                    // Set initialized flag before creating other services to avoid circular dependency
                     _isInitialized = true;
+                    
+                    // Initialize ChatService and SpeedTestService after WiFiDirectService
+                    // These will be initialized when ConnectionService is established
+                    InitializeAdditionalServices();
                 }
                 catch (Exception ex)
                 {
-                    throw new InvalidOperationException($"Failed to initialize WiFiDirectService: {ex.Message}", ex);
+                    throw new InvalidOperationException($"Failed to initialize services: {ex.Message}", ex);
                 }
             }
+        }
+        
+        /// <summary>
+        /// Initializes ChatService and SpeedTestService.
+        /// Called after WiFiDirectService is initialized.
+        /// </summary>
+        private static void InitializeAdditionalServices()
+        {
+            // Reset any existing instances
+            ChatService.ResetInstance();
+            SpeedTestService.ResetInstance();
+            
+            // Create new instances - these will automatically subscribe to ConnectionService events
+            _chatService = ChatService.Instance;
+            _speedTestService = SpeedTestService.Instance;
         }
         
         /// <summary>
@@ -84,8 +146,20 @@ namespace WDCableWUI.Services
                 
                 try
                 {
-                    // Dispose ChatService first
+                    // Dispose ChatService and SpeedTestService first
+                    _chatService?.Dispose();
+                    _chatService = null;
+                    
+                    _speedTestService?.Dispose();
+                    _speedTestService = null;
+                    
+                    // Reset singleton instances
                     ChatService.ResetInstance();
+                    SpeedTestService.ResetInstance();
+                    
+                    // Dispose and reset ConnectionService
+                    _connectionService = null;
+                    ConnectionService.ResetInstance();
                     
                     // Then dispose WiFiDirectService
                     _wifiDirectService?.Dispose();

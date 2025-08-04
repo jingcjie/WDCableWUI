@@ -29,6 +29,8 @@ namespace WDCableWUI
     {
         private Window? _window;
         
+        public Window? Window => _window;
+        
         public App()
         {
             InitializeComponent();

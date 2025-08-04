@@ -84,8 +84,6 @@ namespace WDCableWUI.UI.Chat
             _dispatcherQueue = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
             _messages = new ObservableCollection<ChatMessage>();
             
-            // Set up messages display
-            SetupMessagesDisplay();
         }
 
         protected override void OnNavigatedTo(NavigationEventArgs e)
@@ -95,7 +93,7 @@ namespace WDCableWUI.UI.Chat
             // Access ChatService through ServiceManager
             _chatService = ServiceManager.ChatService;
             
-            // Subscribe to ChatService events
+            // Subscribe to service events if ChatService is available
             if (_chatService != null)
             {
                 _chatService.StatusChanged += OnChatServiceStatusChanged;
@@ -103,11 +101,7 @@ namespace WDCableWUI.UI.Chat
                 _chatService.MessageReceived += OnMessageReceived;
             }
             
-            // Check initial connection status
             UpdateConnectionStatus();
-            
-            // Add welcome message
-            AddSystemMessage("Chat initialized. Waiting for connection...");
         }
 
         protected override void OnNavigatedFrom(NavigationEventArgs e)
@@ -140,7 +134,7 @@ namespace WDCableWUI.UI.Chat
                     ConnectionStatusText.Text = "Connected";
                     ConnectionStatusText.Foreground = (Brush)Application.Current.Resources["SystemFillColorSuccessBrush"];
                     
-                    DisabledOverlay.Visibility = Visibility.Collapsed;
+                    // DisabledOverlay.Visibility = Visibility.Collapsed;
                     MessageTextBox.IsEnabled = true;
                     SendButton.IsEnabled = true;
                 }
@@ -149,26 +143,19 @@ namespace WDCableWUI.UI.Chat
                     ConnectionStatusText.Text = "Disconnected";
                     ConnectionStatusText.Foreground = (Brush)Application.Current.Resources["SystemFillColorCriticalBrush"];
                     
-                    DisabledOverlay.Visibility = Visibility.Visible;
+                    // DisabledOverlay.Visibility = Visibility.Visible;
                     MessageTextBox.IsEnabled = false;
                     SendButton.IsEnabled = false;
                 }
             });
         }
-        
+    
         private void OnChatServiceStatusChanged(object? sender, string status)
         {
             AddSystemMessage(status);
-            var wasConnected = _isConnected;
             UpdateConnectionStatus();
-            
-            // Start listening when connection becomes available
-            if (!wasConnected && _isConnected && _chatService != null)
-            {
-                _chatService.StartListening();
-            }
         }
-        
+
         private void OnChatServiceErrorOccurred(object? sender, string error)
         {
             AddSystemMessage($"Error: {error}");

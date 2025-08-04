@@ -201,15 +201,12 @@ namespace WDCableWUI.Services
         {
             try
             {
-                System.Diagnostics.Debug.WriteLine($"[ChatService] OnMessageReceived called with: {message}");
                 _dispatcherQueue?.TryEnqueue(() => {
-                    System.Diagnostics.Debug.WriteLine($"[ChatService] Invoking MessageReceived event for: {message}");
                     MessageReceived?.Invoke(this, message);
                 });
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[ChatService] OnMessageReceived exception: {ex.Message}");
                 // Ignore dispatcher errors during message delivery
             }
         }
@@ -220,7 +217,6 @@ namespace WDCableWUI.Services
         /// <param name="message">The message to send</param>
         public void SendMessage(string message)
         {
-            System.Diagnostics.Debug.WriteLine($"[ChatService] SendMessage called with: {message}");
             if (string.IsNullOrEmpty(message))
             {
                 OnErrorOccurred("Cannot send empty message");
@@ -230,7 +226,6 @@ namespace WDCableWUI.Services
             var connection = ChatConnection;
             if (connection == null || !IsConnectionValid(connection))
             {
-                System.Diagnostics.Debug.WriteLine("[ChatService] No valid chat connection available for sending");
                 OnErrorOccurred("No valid chat connection available");
                 return;
             }
@@ -248,17 +243,14 @@ namespace WDCableWUI.Services
                 
                 // Serialize to JSON and add newline terminator
                 var jsonString = JsonSerializer.Serialize(jsonMessage) + "\n";
-                System.Diagnostics.Debug.WriteLine($"[ChatService] Sending JSON: {jsonString.Trim()}");
                 var messageBytes = Encoding.UTF8.GetBytes(jsonString);
                 
                 // Send the message
                 stream.Write(messageBytes, 0, messageBytes.Length);
                 stream.Flush();
-                System.Diagnostics.Debug.WriteLine($"[ChatService] Message sent successfully: {message}");
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[ChatService] SendMessage exception: {ex.Message}");
                 OnErrorOccurred($"Failed to send message: {ex.Message}");
             }
         }
@@ -269,16 +261,13 @@ namespace WDCableWUI.Services
         /// </summary>
         public void StartListening()
         {
-            System.Diagnostics.Debug.WriteLine("[ChatService] StartListening called");
             var connection = ChatConnection;
             if (connection == null || !IsConnectionValid(connection))
             {
-                System.Diagnostics.Debug.WriteLine("[ChatService] No valid chat connection available for listening");
                 OnErrorOccurred("No valid chat connection available for listening");
                 return;
             }
             
-            System.Diagnostics.Debug.WriteLine($"[ChatService] Valid connection found: {connection.Client.RemoteEndPoint}");
             try
             {
                 // Stop any existing listening task
@@ -293,17 +282,14 @@ namespace WDCableWUI.Services
                 {
                     try
                     {
-                        System.Diagnostics.Debug.WriteLine("[ChatService] Starting message listener task");
                         var stream = connection.GetStream();
                         using var reader = new StreamReader(stream, Encoding.UTF8, leaveOpen: true);
                         
-                        System.Diagnostics.Debug.WriteLine("[ChatService] Message listener loop started");
                         while (!cancellationToken.IsCancellationRequested && connection.Connected)
                         {
                             var line = await reader.ReadLineAsync();
                             if (line != null)
                             {
-                                System.Diagnostics.Debug.WriteLine($"[ChatService] Received raw line: {line}");
                                 try
                                 {
                                     // Try to parse as JSON first
@@ -313,28 +299,20 @@ namespace WDCableWUI.Services
                                         var messageContent = messageElement.GetString();
                                         if (!string.IsNullOrEmpty(messageContent))
                                         {
-                                            System.Diagnostics.Debug.WriteLine($"[ChatService] Parsed JSON message: {messageContent}");
                                             OnMessageReceived(messageContent);
                                         }
                                     }
                                 }
                                 catch (JsonException ex)
                                 {
-                                    System.Diagnostics.Debug.WriteLine($"[ChatService] JSON parse failed, using plain text: {ex.Message}");
                                     // Fallback to plain text for backward compatibility
                                     OnMessageReceived(line);
                                 }
                             }
-                            else
-                            {
-                                System.Diagnostics.Debug.WriteLine("[ChatService] ReadLineAsync returned null");
-                            }
                         }
-                        System.Diagnostics.Debug.WriteLine("[ChatService] Message listener loop ended");
                     }
                     catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
                     {
-                        System.Diagnostics.Debug.WriteLine($"[ChatService] Message listener exception: {ex.Message}");
                         OnErrorOccurred($"Error in message listener: {ex.Message}");
                     }
                 }, cancellationToken);

@@ -41,7 +41,6 @@ namespace WDCableWUI.Services
         private WiFiDirectConnectionListener? _connectionListener;
         private Windows.Devices.WiFiDirect.WiFiDirectDevice? _wifiDirectDevice;
         private readonly DispatcherQueue _dispatcherQueue;
-        private ConnectionService? _connectionService;
         
         public ObservableCollection<WiFiDirectDevice> DiscoveredDevices { get; }
         public bool IsAdvertising { get; private set; }
@@ -51,7 +50,7 @@ namespace WDCableWUI.Services
         public bool IsGroupOwner { get; private set; }
         public string? LocalIP { get; private set; }
         public string? RemoteIP { get; private set; }
-        public ConnectionService? ConnectionService => _connectionService;
+
         
         public event EventHandler<WiFiDirectDevice>? DeviceDiscovered;
         public event EventHandler<WiFiDirectDevice>? DeviceConnected;
@@ -181,7 +180,7 @@ namespace WDCableWUI.Services
                 var wifiDirectDevice = await Windows.Devices.WiFiDirect.WiFiDirectDevice.FromIdAsync(device.Id);
                 if (wifiDirectDevice == null)
                 {
-                    OnErrorOccurred("Failed to connect to WiFi Direct device");
+                    // OnErrorOccurred("Failed to connect to WiFi Direct device");
                     return false;
                 }
 
@@ -195,8 +194,8 @@ namespace WDCableWUI.Services
                 // Determine group owner role
                 await DetermineGroupOwnerAsync(_wifiDirectDevice);
                 
-                // Create and initialize ConnectionService
-                await CreateConnectionServiceAsync();
+                // ConnectionService is now managed by ServiceManager
+                // No need to create it here
                 
                 OnDeviceConnected(_connectedDevice);
                 OnStatusChanged($"Connected to {device.Name}");
@@ -215,9 +214,6 @@ namespace WDCableWUI.Services
             {
                 if (_connectedDevice != null)
                 {
-                    // Dispose ConnectionService first
-                    DisposeConnectionService();
-                    
                     _connectedDevice.IsConnected = false;
                     _connectedDevice = null;
                     
@@ -399,8 +395,8 @@ namespace WDCableWUI.Services
                             
                             await DetermineGroupOwnerAsync(_wifiDirectDevice);
                             
-                            // Create and initialize ConnectionService
-                            await CreateConnectionServiceAsync();
+                            // ConnectionService is now managed by ServiceManager
+                // No need to create it here
                             
                             _dispatcherQueue.TryEnqueue(() => OnDeviceConnected(requestingDevice));
                         }
@@ -511,53 +507,12 @@ namespace WDCableWUI.Services
             ConnectionRequested?.Invoke(this, args);
         }
         
-        private Task CreateConnectionServiceAsync()
-        {
-            try
-            {
-                System.Diagnostics.Debug.WriteLine("[WiFiDirectService] CreateConnectionServiceAsync called");
-                // Dispose existing ConnectionService if any
-                DisposeConnectionService();
-                
-                // Create new ConnectionService
-                _connectionService = new ConnectionService(this);
-                System.Diagnostics.Debug.WriteLine("[WiFiDirectService] ConnectionService created successfully");
-                
-                OnStatusChanged("ConnectionService created and ready for initialization");
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"[WiFiDirectService] CreateConnectionServiceAsync exception: {ex.Message}");
-                OnErrorOccurred($"Failed to create ConnectionService: {ex.Message}");
-            }
-            
-            return Task.CompletedTask;
-        }
-        
-        private void DisposeConnectionService()
-        {
-            if (_connectionService != null)
-            {
-                try
-                {
-                    _connectionService.Dispose();
-                    _connectionService = null;
-                    OnStatusChanged("ConnectionService disposed");
-                }
-                catch (Exception ex)
-                {
-                    OnErrorOccurred($"Error disposing ConnectionService: {ex.Message}");
-                }
-            }
-        }
+
 
         public void Dispose()
         {
             StopAdvertising();
             StopScanning();
-            
-            // Dispose ConnectionService
-            DisposeConnectionService();
             
             if (_connectionListener != null)
             {
