@@ -19,32 +19,11 @@ using Windows.Storage.Pickers;
 using Windows.ApplicationModel.DataTransfer;
 using Microsoft.UI;
 using Windows.UI;
+using WDCableWUI.Services;
 
 namespace WDCableWUI.UI.FileTransfer
 {
-    /// <summary>
-    /// Data model for selected files
-    /// </summary>
-    public class SelectedFileItem
-    {
-        public string Name { get; set; }
-        public string FullPath { get; set; }
-        public long Size { get; set; }
-        public string SizeFormatted => FormatFileSize(Size);
 
-        private static string FormatFileSize(long bytes)
-        {
-            string[] suffixes = { "B", "KB", "MB", "GB", "TB" };
-            int counter = 0;
-            decimal number = bytes;
-            while (Math.Round(number / 1024) >= 1)
-            {
-                number /= 1024;
-                counter++;
-            }
-            return $"{number:n1} {suffixes[counter]}";
-        }
-    }
 
     /// <summary>
     /// Data model for transfer records
@@ -72,29 +51,27 @@ namespace WDCableWUI.UI.FileTransfer
     /// </summary>
     public sealed partial class FileTransferPage : Page
     {
-        private ObservableCollection<SelectedFileItem> _selectedFiles;
         private ObservableCollection<TransferRecord> _transferRecords;
         private ObservableCollection<TransferRecord> _filteredRecords;
         private string _currentFilter = "All";
+        private StorageFile? _selectedFile = null;
+        private FileTransferService? _fileTransferService;
 
         public FileTransferPage()
         {
             InitializeComponent();
             InitializeCollections();
             InitializeDefaultSettings();
+            InitializeFileTransferService();
         }
 
         private void InitializeCollections()
         {
-            _selectedFiles = new ObservableCollection<SelectedFileItem>();
             _transferRecords = new ObservableCollection<TransferRecord>();
             _filteredRecords = new ObservableCollection<TransferRecord>();
             
-            SelectedFilesList.ItemsSource = _selectedFiles;
             TransferRecordsList.ItemsSource = _filteredRecords;
 
-            // Add some sample transfer records for demonstration
-            AddSampleTransferRecords();
         }
 
         private void InitializeDefaultSettings()
@@ -102,53 +79,61 @@ namespace WDCableWUI.UI.FileTransfer
             // Set default download location to user's Downloads folder
             var downloadsPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
             DownloadLocationTextBox.Text = downloadsPath;
-        }
-
-        private void AddSampleTransferRecords()
-        {
-            var sampleRecords = new List<TransferRecord>
-            {
-                new TransferRecord
-                {
-                    FileName = "document.pdf",
-                    Status = "Completed",
-                    TimeStamp = DateTime.Now.AddMinutes(-30).ToString("HH:mm"),
-                    TypeIcon = "\uE724", // Send icon
-                    StatusColor = new SolidColorBrush(Colors.Green),
-                    Progress = 100,
-                    ProgressVisibility = Visibility.Collapsed,
-                    Type = TransferType.Sent
-                },
-                new TransferRecord
-                {
-                    FileName = "image.jpg",
-                    Status = "Completed",
-                    TimeStamp = DateTime.Now.AddHours(-1).ToString("HH:mm"),
-                    TypeIcon = "\uE896", // Receive icon
-                    StatusColor = new SolidColorBrush(Colors.Green),
-                    Progress = 100,
-                    ProgressVisibility = Visibility.Collapsed,
-                    Type = TransferType.Received
-                },
-                new TransferRecord
-                {
-                    FileName = "video.mp4",
-                    Status = "Transferring",
-                    TimeStamp = DateTime.Now.ToString("HH:mm"),
-                    TypeIcon = "\uE724", // Send icon
-                    StatusColor = new SolidColorBrush(Colors.Orange),
-                    Progress = 65,
-                    ProgressVisibility = Visibility.Visible,
-                    Type = TransferType.Sent
-                }
-            };
-
-            foreach (var record in sampleRecords)
-            {
-                _transferRecords.Add(record);
-            }
             
-            ApplyFilter();
+            // Update the service with the default path
+            UpdateServiceDownloadPath(downloadsPath);
+        }
+        
+        private void InitializeFileTransferService()
+        {
+            try
+            {
+                _fileTransferService = ServiceManager.FileTransferService;
+                SubscribeToFileTransferEvents();
+            }
+            catch (Exception ex)
+            {
+                // Service manager might not be initialized yet
+                System.Diagnostics.Debug.WriteLine($"FileTransferService not available: {ex.Message}");
+            }
+        }
+        
+        private void UpdateServiceDownloadPath(string downloadPath)
+        {
+            try
+            {
+                _fileTransferService?.SetDownloadPath(downloadPath);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Failed to update download path: {ex.Message}");
+            }
+        }
+        
+        private void SubscribeToFileTransferEvents()
+        {
+            if (_fileTransferService != null)
+            {
+                _fileTransferService.FileSent += OnFileSent;
+                _fileTransferService.FileReceived += OnFileReceived;
+                _fileTransferService.FileReceiveStarted += OnFileReceiveStarted;
+                _fileTransferService.TransferProgress += OnTransferProgress;
+                _fileTransferService.StatusChanged += OnFileTransferStatusChanged;
+                _fileTransferService.ErrorOccurred += OnFileTransferError;
+            }
+        }
+        
+        private void UnsubscribeFromFileTransferEvents()
+        {
+            if (_fileTransferService != null)
+            {
+                _fileTransferService.FileSent -= OnFileSent;
+                _fileTransferService.FileReceived -= OnFileReceived;
+                _fileTransferService.FileReceiveStarted -= OnFileReceiveStarted;
+                _fileTransferService.TransferProgress -= OnTransferProgress;
+                _fileTransferService.StatusChanged -= OnFileTransferStatusChanged;
+                _fileTransferService.ErrorOccurred -= OnFileTransferError;
+            }
         }
 
         protected override void OnNavigatedTo(NavigationEventArgs e)
@@ -159,11 +144,13 @@ namespace WDCableWUI.UI.FileTransfer
         protected override void OnNavigatedFrom(NavigationEventArgs e)
         {
             base.OnNavigatedFrom(e);
+            // Unsubscribe from events when navigating away
+            UnsubscribeFromFileTransferEvents();
         }
 
         #region File Selection Events
 
-        private async void BrowseFilesButton_Click(object sender, RoutedEventArgs e)
+        private async void BrowseFileButton_Click(object sender, RoutedEventArgs e)
         {
             var picker = new FileOpenPicker();
             picker.FileTypeFilter.Add("*");
@@ -173,65 +160,48 @@ namespace WDCableWUI.UI.FileTransfer
             var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(window);
             WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
 
-            var files = await picker.PickMultipleFilesAsync();
-            if (files != null && files.Count > 0)
+            var file = await picker.PickSingleFileAsync();
+            if (file != null)
             {
-                await AddFilesToSelection(files);
+                await SetSelectedFile(file);
             }
         }
 
-        private async void BrowseFolderButton_Click(object sender, RoutedEventArgs e)
+        private async Task SetSelectedFile(StorageFile file)
         {
-            var picker = new FolderPicker();
-            picker.FileTypeFilter.Add("*");
+            _selectedFile = file;
+            var properties = await file.GetBasicPropertiesAsync();
             
-            // Initialize the picker with the window handle
-            var window = (Application.Current as App)?.Window ?? Microsoft.UI.Xaml.Window.Current;
-            var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(window);
-            WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
-
-            var folder = await picker.PickSingleFolderAsync();
-            if (folder != null)
-            {
-                var files = await folder.GetFilesAsync();
-                await AddFilesToSelection(files);
-            }
-        }
-
-        private async Task AddFilesToSelection(IEnumerable<StorageFile> files)
+            SelectedFileName.Text = file.Name;
+            SelectedFileSize.Text = FormatFileSize((long)properties.Size);
+            SelectedFilePanel.Visibility = Visibility.Visible;
+            
+            UpdateSendButtonState();
+         }
+         
+         private string FormatFileSize(long bytes)
+         {
+             string[] sizes = { "B", "KB", "MB", "GB", "TB" };
+             double len = bytes;
+             int order = 0;
+             while (len >= 1024 && order < sizes.Length - 1)
+             {
+                 order++;
+                 len = len / 1024;
+             }
+             return $"{len:0.##} {sizes[order]}";
+         }
+         
+         private void UpdateSendButtonState()
         {
-            foreach (var file in files)
-            {
-                var properties = await file.GetBasicPropertiesAsync();
-                var fileItem = new SelectedFileItem
-                {
-                    Name = file.Name,
-                    FullPath = file.Path,
-                    Size = (long)properties.Size
-                };
-
-                // Check if file is already selected
-                if (!_selectedFiles.Any(f => f.FullPath == fileItem.FullPath))
-                {
-                    _selectedFiles.Add(fileItem);
-                }
-            }
-
-            UpdateSelectedFilesVisibility();
-        }
-
-        private void UpdateSelectedFilesVisibility()
-        {
-            SelectedFilesPanel.Visibility = _selectedFiles.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+            SendFileButton.IsEnabled = _selectedFile != null && _fileTransferService?.IsConnected == true;
         }
 
         private void RemoveFileButton_Click(object sender, RoutedEventArgs e)
         {
-            if (sender is Button button && button.Tag is SelectedFileItem fileItem)
-            {
-                _selectedFiles.Remove(fileItem);
-                UpdateSelectedFilesVisibility();
-            }
+            _selectedFile = null;
+            SelectedFilePanel.Visibility = Visibility.Collapsed;
+            UpdateSendButtonState();
         }
 
         #endregion
@@ -251,11 +221,11 @@ namespace WDCableWUI.UI.FileTransfer
             if (e.DataView.Contains(StandardDataFormats.StorageItems))
             {
                 var items = await e.DataView.GetStorageItemsAsync();
-                var files = items.OfType<StorageFile>();
+                var firstFile = items.OfType<StorageFile>().FirstOrDefault();
                 
-                if (files.Any())
+                if (firstFile != null)
                 {
-                    await AddFilesToSelection(files);
+                    await SetSelectedFile(firstFile);
                 }
             }
         }
@@ -264,57 +234,47 @@ namespace WDCableWUI.UI.FileTransfer
 
         #region Transfer Operations
 
-        private async void SendFilesButton_Click(object sender, RoutedEventArgs e)
+        private async void SendFileButton_Click(object sender, RoutedEventArgs e)
         {
-            if (_selectedFiles.Count == 0)
+            if (_selectedFile == null)
             {
-                await ShowMessageDialog("No files selected", "Please select files to send first.");
+                await ShowMessageDialog("No file selected", "Please select a file to send.");
                 return;
             }
-
-            // TODO: Implement actual file sending logic with FileTransferService
-            // For now, simulate the transfer
-            await SimulateFileTransfer();
-        }
-
-        private async Task SimulateFileTransfer()
-        {
-            foreach (var file in _selectedFiles.ToList())
+            
+            if (_fileTransferService == null || !_fileTransferService.IsConnected)
             {
-                var transferRecord = new TransferRecord
-                {
-                    FileName = file.Name,
-                    Status = "Transferring",
-                    TimeStamp = DateTime.Now.ToString("HH:mm"),
-                    TypeIcon = "\uE724", // Send icon
-                    StatusColor = new SolidColorBrush(Colors.Orange),
-                    Progress = 0,
-                    ProgressVisibility = Visibility.Visible,
-                    Type = TransferType.Sent
-                };
-
-                _transferRecords.Insert(0, transferRecord);
-                ApplyFilter();
-
-                // Simulate progress
-                for (int progress = 0; progress <= 100; progress += 10)
-                {
-                    transferRecord.Progress = progress;
-                    await Task.Delay(100); // Simulate transfer time
-                }
-
-                // Mark as completed
-                transferRecord.Status = "Completed";
-                transferRecord.StatusColor = new SolidColorBrush(Colors.Green);
-                transferRecord.ProgressVisibility = Visibility.Collapsed;
+                await ShowMessageDialog("Connection Error", "File transfer service is not available. Please ensure devices are connected.");
+                return;
             }
-
-            // Clear selected files after sending
-            _selectedFiles.Clear();
-            UpdateSelectedFilesVisibility();
-
-            await ShowMessageDialog("Transfer Complete", "All files have been sent successfully.");
+            
+            try
+            {
+                // Disable send button during transfer
+                SendFileButton.IsEnabled = false;
+                
+                // Create transfer record for the outgoing file
+                var properties = await _selectedFile.GetBasicPropertiesAsync();
+                
+                
+                // Send the file using the file transfer service
+                await _fileTransferService.SendFileAsync(_selectedFile);
+                
+                // Clear selected file after sending
+                _selectedFile = null;
+                SelectedFilePanel.Visibility = Visibility.Collapsed;
+            }
+            catch (Exception ex)
+            {
+                await ShowMessageDialog("Transfer Error", $"Failed to send file: {ex.Message}");
+            }
+            finally
+            {
+                UpdateSendButtonState();
+            }
         }
+
+
 
         #endregion
 
@@ -334,6 +294,19 @@ namespace WDCableWUI.UI.FileTransfer
             if (folder != null)
             {
                 DownloadLocationTextBox.Text = folder.Path;
+                UpdateServiceDownloadPath(folder.Path);
+            }
+        }
+        
+        private void DownloadLocationTextBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (sender is TextBox textBox && !string.IsNullOrWhiteSpace(textBox.Text))
+            {
+                // Validate that the path exists before updating the service
+                if (Directory.Exists(textBox.Text))
+                {
+                    UpdateServiceDownloadPath(textBox.Text);
+                }
             }
         }
 
@@ -393,6 +366,70 @@ namespace WDCableWUI.UI.FileTransfer
                 _transferRecords.Clear();
                 _filteredRecords.Clear();
             }
+        }
+
+        #endregion
+
+        #region File Transfer Event Handlers
+
+        private void OnFileSent(object? sender, FileTransferEventArgs e)
+        {
+            
+            var transferRecord = new TransferRecord
+                {
+                    FileName = e.FileName,
+                    Status = "Sent",
+                    TimeStamp = DateTime.Now.ToString("HH:mm"),
+                    TypeIcon = "\uE724", // Send icon
+                    StatusColor = new SolidColorBrush(Colors.Green),
+                    Progress = 0,
+                    ProgressVisibility = Visibility.Visible,
+                    Type = TransferType.Sent
+                };
+                
+                _transferRecords.Insert(0, transferRecord);
+                ApplyFilter();
+        }
+
+        private void OnFileReceiveStarted(object? sender, FileReceiveStartedEventArgs e)
+         {
+             
+         }
+
+        private void OnFileReceived(object? sender, FileTransferEventArgs e)
+        {
+            // Find existing transfer record and update it
+            var transferRecord = new TransferRecord
+             {
+                 FileName = e.FileName,
+                 Status = "Received",
+                 TimeStamp = DateTime.Now.ToString("HH:mm"),
+                 TypeIcon = "\uE896", // Receive icon
+                 StatusColor = new SolidColorBrush(Colors.Green),
+                 Progress = 0,
+                 ProgressVisibility = Visibility.Visible,
+                 Type = TransferType.Received
+             };
+ 
+             _transferRecords.Insert(0, transferRecord);
+             ApplyFilter();
+        }
+
+        private void OnTransferProgress(object? sender, FileTransferProgressEventArgs e)
+        {
+
+        }
+
+        private void OnFileTransferStatusChanged(object? sender, string status)
+        {
+            // Handle status changes if needed
+            System.Diagnostics.Debug.WriteLine($"FileTransfer Status: {status}");
+        }
+
+        private void OnFileTransferError(object? sender, string error)
+        {
+            // Handle errors
+            _ = ShowMessageDialog("Transfer Error", error);
         }
 
         #endregion

@@ -13,6 +13,7 @@ namespace WDCableWUI.Services
         private static ConnectionService? _connectionService;
         private static ChatService? _chatService;
         private static SpeedTestService? _speedTestService;
+        private static FileTransferService? _fileTransferService;
         private static readonly object _lock = new object();
         private static bool _isInitialized = false;
         
@@ -77,6 +78,21 @@ namespace WDCableWUI.Services
         }
         
         /// <summary>
+        /// Gets the FileTransferService instance.
+        /// </summary>
+        public static FileTransferService? FileTransferService
+        {
+            get
+            {
+                if (!_isInitialized)
+                {
+                    throw new InvalidOperationException("ServiceManager must be initialized before accessing services. Call Initialize() first.");
+                }
+                return _fileTransferService;
+            }
+        }
+        
+        /// <summary>
         /// Gets whether the ServiceManager has been initialized.
         /// </summary>
         public static bool IsInitialized => _isInitialized;
@@ -117,7 +133,7 @@ namespace WDCableWUI.Services
         }
         
         /// <summary>
-        /// Initializes ChatService and SpeedTestService.
+        /// Initializes ChatService, SpeedTestService, and FileTransferService.
         /// Called after WiFiDirectService is initialized.
         /// </summary>
         private static void InitializeAdditionalServices()
@@ -125,10 +141,12 @@ namespace WDCableWUI.Services
             // Reset any existing instances
             ChatService.ResetInstance();
             SpeedTestService.ResetInstance();
+            FileTransferService.ResetInstance();
             
             // Create new instances - these will automatically subscribe to ConnectionService events
             _chatService = ChatService.Instance;
             _speedTestService = SpeedTestService.Instance;
+            _fileTransferService = FileTransferService.Instance;
         }
         
         /// <summary>
@@ -146,16 +164,20 @@ namespace WDCableWUI.Services
                 
                 try
                 {
-                    // Dispose ChatService and SpeedTestService first
+                    // Dispose ChatService, SpeedTestService, and FileTransferService first
                     _chatService?.Dispose();
                     _chatService = null;
                     
                     _speedTestService?.Dispose();
                     _speedTestService = null;
                     
+                    _fileTransferService?.Dispose();
+                    _fileTransferService = null;
+                    
                     // Reset singleton instances
                     ChatService.ResetInstance();
                     SpeedTestService.ResetInstance();
+                    FileTransferService.ResetInstance();
                     
                     // Dispose and reset ConnectionService
                     _connectionService = null;
