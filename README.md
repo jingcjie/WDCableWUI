@@ -11,9 +11,12 @@ This repository contains the Windows version of WDCable, built with WinUI 3 for 
 
 ## 📸 Screenshots
 
-| Connection | Chat | Speed Test | File Transfer |
-| :---: | :---: | :---: | :---: |
-| ![Connection](figures/Screenshot1.png) | ![Chat](figures/Screenshot2.png) | ![Speed Test](figures/Screenshot3.png) | ![File Transfer](figures/Screenshot4.png) |
+| Feature | Screenshot |
+| :---: | :---: |
+| **Connection** | ![Connection](figures/Screenshot1.png) |
+| **Chat** | ![Chat](figures/Screenshot2.png) |
+| **Speed Test** | ![Speed Test](figures/Screenshot3.png) |
+| **File Transfer** | ![File Transfer](figures/Screenshot4.png) |
 
 ## ✨ Features
 
