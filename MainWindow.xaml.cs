@@ -21,6 +21,7 @@ using Microsoft.UI;
 using WinRT.Interop;
 using Windows.Graphics;
 using System.Diagnostics;
+using WDCableWUI.Services;
 
 namespace WDCableWUI
 {
@@ -53,6 +54,9 @@ namespace WDCableWUI
             
             // Initialize status
             UpdateConnectionStatus(false);
+            
+            // Subscribe to WiFiDirectService events
+            SubscribeToWiFiDirectEvents();
         }
         
         private void SetupCustomTitleBar()
@@ -99,6 +103,33 @@ namespace WDCableWUI
             }
         }
         
+        private void SubscribeToWiFiDirectEvents()
+        {
+            if (ServiceManager.IsInitialized && ServiceManager.WiFiDirectService != null)
+            {
+                ServiceManager.WiFiDirectService.DeviceConnected += OnWiFiDirectDeviceConnected;
+                ServiceManager.WiFiDirectService.DeviceDisconnected += OnWiFiDirectDeviceDisconnected;
+            }
+        }
+        
+        private void OnWiFiDirectDeviceConnected(object? sender, WiFiDirectDevice device)
+        {
+            // Ensure UI updates happen on the UI thread
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                UpdateConnectionStatus(true, device?.Name ?? "");
+            });
+        }
+        
+        private void OnWiFiDirectDeviceDisconnected(object? sender, EventArgs e)
+        {
+            // Ensure UI updates happen on the UI thread
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                UpdateConnectionStatus(false);
+            });
+        }
+        
         public void UpdateConnectionStatus(bool isConnected, string deviceName = "")
         {
             if (isConnected)
@@ -117,29 +148,14 @@ namespace WDCableWUI
             }
         }
         
-        public void ShowNotificationBadge(string tabTag, int count = 1)
+        private void UnsubscribeFromWiFiDirectEvents()
         {
-            var menuItem = MainNavigationView.MenuItems
-                .OfType<NavigationViewItem>()
-                .FirstOrDefault(item => item.Tag?.ToString() == tabTag);
-                
-            if (menuItem?.InfoBadge != null)
+            if (ServiceManager.IsInitialized && ServiceManager.WiFiDirectService != null)
             {
-                menuItem.InfoBadge.Value = count;
-                menuItem.InfoBadge.Visibility = Visibility.Visible;
+                ServiceManager.WiFiDirectService.DeviceConnected -= OnWiFiDirectDeviceConnected;
+                ServiceManager.WiFiDirectService.DeviceDisconnected -= OnWiFiDirectDeviceDisconnected;
             }
         }
         
-        public void HideNotificationBadge(string tabTag)
-        {
-            var menuItem = MainNavigationView.MenuItems
-                .OfType<NavigationViewItem>()
-                .FirstOrDefault(item => item.Tag?.ToString() == tabTag);
-                
-            if (menuItem?.InfoBadge != null)
-            {
-                menuItem.InfoBadge.Visibility = Visibility.Collapsed;
-            }
-        }
     }
 }

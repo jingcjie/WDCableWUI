@@ -30,7 +30,7 @@
             
             <!-- App Icon and Title -->
             <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,0,0">
-                <FontIcon FontFamily="{StaticResource SymbolThemeFontFamily}" Glyph="&#xE968;" FontSize="16" Margin="0,0,8,0"/>
+                <Image Source="Assets/Square44x44Logo.png" Width="16" Height="16" Margin="0,0,8,0"/>
                 <TextBlock Text="WiFi Direct Cable" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center"/>
             </StackPanel>
             

@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 
 <Package
   xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
@@ -8,15 +8,15 @@
   IgnorableNamespaces="uap rescap">
 
   <Identity
-    Name="9e569ac7-2cc2-4fe0-9478-12d44d775876"
-    Publisher="CN=jie"
+    Name="JINGCJIE.4084573DC88A9"
+    Publisher="CN=79F5182C-F623-427B-BB35-112212334FEE"
     Version="1.0.0.0" />
 
-  <mp:PhoneIdentity PhoneProductId="9e569ac7-2cc2-4fe0-9478-12d44d775876" PhonePublisherId="00000000-0000-0000-0000-000000000000"/>
+  <mp:PhoneIdentity PhoneProductId="a4a62732-88c3-4cc4-beb4-f7e1f1b4670c" PhonePublisherId="00000000-0000-0000-0000-000000000000"/>
 
   <Properties>
-    <DisplayName>WDCableWUI</DisplayName>
-    <PublisherDisplayName>jie</PublisherDisplayName>
+    <DisplayName>WDCable</DisplayName>
+    <PublisherDisplayName>JINGCJIE</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
   </Properties>
 
@@ -34,13 +34,14 @@
       Executable="$targetnametoken$.exe"
       EntryPoint="$targetentrypoint$">
       <uap:VisualElements
-        DisplayName="WDCableWUI"
+        DisplayName="WDCable"
         Description="WDCableWUI"
         BackgroundColor="transparent"
         Square150x150Logo="Assets\Square150x150Logo.png"
         Square44x44Logo="Assets\Square44x44Logo.png">
-        <uap:DefaultTile Wide310x150Logo="Assets\Wide310x150Logo.png" />
+        <uap:DefaultTile Wide310x150Logo="Assets\Wide310x150Logo.png"  Square71x71Logo="Assets\SmallTile.png" Square310x310Logo="Assets\LargeTile.png"/>
         <uap:SplashScreen Image="Assets\SplashScreen.png" />
+        <uap:LockScreen BadgeLogo="Assets\BadgeLogo.png" Notification="badge"/>
       </uap:VisualElements>
     </Application>
   </Applications>

@@ -80,23 +80,11 @@ namespace WDCableWUI.UI.SpeedTest
 
         private void OnSpeedTestErrorOccurred(object sender, string error)
         {
-            _dispatcherQueue.TryEnqueue(async () =>
-            {
-                var dialog = new ContentDialog
-                {
-                    Title = "Speed Test Error",
-                    Content = $"An error occurred during the speed test:\n\n{error}",
-                    CloseButtonText = "OK",
-                    XamlRoot = this.XamlRoot
-                };
-                await dialog.ShowAsync();
-                
-                // Reset test states
-                _isUploadTestRunning = false;
-                _isDownloadTestRunning = false;
-                UpdateTestButtonStates();
-                HideProgressBars();
-            });
+            // Reset test states
+            _isUploadTestRunning = false;
+            _isDownloadTestRunning = false;
+            UpdateTestButtonStates();
+            HideProgressBars();
         }
 
         private void OnSpeedTestCompleted(object sender, SpeedTestResult result)
