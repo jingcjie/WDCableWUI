@@ -26,6 +26,10 @@ This repository contains the Windows version of WDCable, built with WinUI 3 for 
 *   **Network Speed Test**: Includes a tool to measure the transfer speed between your devices.
 *   **Modern Windows UI**: Built with the latest WinUI 3 framework for a clean and intuitive interface.
 
+## 📱 Android Version
+
+An Android version of WDCable is also available, allowing for cross-platform data transfer. You can find it here: [WDCable for Android](https://github.com/jingcjie/WDCable_flutter).
+
 ## 🚀 Getting Started
 
 To get started with WDCable for Windows, you can either build the project from the source or download the latest release.
@@ -34,14 +38,11 @@ To get started with WDCable for Windows, you can either build the project from t
 
 1.  Clone this repository:
     ```sh
-    git clone https://github.com/your-username/WDCableWUI.git
+    git clone https://github.com/jingcjie/WDCableWUI.git
     ```
 2.  Open `WDCableWUI.sln` in Visual Studio.
 3.  Build and run the project.
 
-## 📱 Android Version
-
-An Android version of WDCable is also available, allowing for cross-platform data transfer. You can find it here: [WDCable for Android](https://github.com/jingcjie/WDCable_flutter).
 
 ## 🛠️ Built With
 
