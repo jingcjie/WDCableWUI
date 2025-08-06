@@ -88,13 +88,17 @@ namespace WDCableWUI.UI.FileTransfer
         {
             try
             {
-                _fileTransferService = ServiceManager.FileTransferService;
-                SubscribeToFileTransferEvents();
+                _fileTransferService = ServiceManager.IsInitialized ? ServiceManager.FileTransferService : null;
+                if (_fileTransferService != null)
+                {
+                    SubscribeToFileTransferEvents();
+                }
             }
             catch (Exception ex)
             {
                 // Service manager might not be initialized yet
                 System.Diagnostics.Debug.WriteLine($"FileTransferService not available: {ex.Message}");
+                _fileTransferService = null;
             }
         }
         

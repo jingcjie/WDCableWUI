@@ -90,15 +90,23 @@ namespace WDCableWUI.UI.Chat
         {
             base.OnNavigatedTo(e);
             
-            // Access ChatService through ServiceManager
-            _chatService = ServiceManager.ChatService;
-            
-            // Subscribe to service events if ChatService is available
-            if (_chatService != null)
+            try
             {
-                _chatService.StatusChanged += OnChatServiceStatusChanged;
-                _chatService.ErrorOccurred += OnChatServiceErrorOccurred;
-                _chatService.MessageReceived += OnMessageReceived;
+                // Access ChatService through ServiceManager with null checks
+                _chatService = ServiceManager.IsInitialized ? ServiceManager.ChatService : null;
+                
+                // Subscribe to service events if ChatService is available
+                if (_chatService != null)
+                {
+                    _chatService.StatusChanged += OnChatServiceStatusChanged;
+                    _chatService.ErrorOccurred += OnChatServiceErrorOccurred;
+                    _chatService.MessageReceived += OnMessageReceived;
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Failed to initialize ChatService: {ex.Message}");
+                _chatService = null;
             }
             
             UpdateConnectionStatus();
@@ -125,7 +133,15 @@ namespace WDCableWUI.UI.Chat
         
         private void UpdateConnectionStatus()
         {
-            _isConnected = ServiceManager.IsConnected && (_chatService?.IsConnected ?? false);
+            try
+            {
+                _isConnected = ServiceManager.IsInitialized && ServiceManager.IsConnected && (_chatService?.IsConnected ?? false);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Failed to update connection status: {ex.Message}");
+                _isConnected = false;
+            }
             
             _dispatcherQueue.TryEnqueue(() =>
             {

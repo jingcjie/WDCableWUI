@@ -118,6 +118,9 @@ namespace WDCableWUI.Services
                     // Initialize ConnectionService with WiFiDirectService
                     _connectionService.Initialize(_wifiDirectService);
                     
+                    // Set up bidirectional event subscription
+                    _wifiDirectService.SetConnectionService(_connectionService);
+                    
                     // Set initialized flag before creating other services to avoid circular dependency
                     _isInitialized = true;
                     
@@ -125,8 +128,23 @@ namespace WDCableWUI.Services
                     // These will be initialized when ConnectionService is established
                     InitializeAdditionalServices();
                 }
+                catch (System.Runtime.InteropServices.COMException comEx) when (comEx.HResult == unchecked((int)0x80070032) || comEx.HResult == unchecked((int)0x80004005))
+                {
+                    // WiFi Direct not supported (ERROR_NOT_SUPPORTED or E_FAIL)
+                    throw new NotSupportedException("WiFi Direct is not supported on this system. The Windows version may be too low or no wireless card is installed correctly.", comEx);
+                }
+                catch (UnauthorizedAccessException uaEx)
+                {
+                    // WiFi Direct access denied
+                    throw new NotSupportedException("WiFi Direct access is denied. Please check if WiFi is enabled and the application has necessary permissions.", uaEx);
+                }
                 catch (Exception ex)
                 {
+                    // Check if the inner exception or message indicates WiFi Direct is not supported
+                    if (ex.Message.Contains("WiFi Direct") || ex.Message.Contains("not supported") || ex.Message.Contains("wireless"))
+                    {
+                        throw new NotSupportedException("WiFi Direct is not supported on this system. The Windows version may be too low or no wireless card is installed correctly.", ex);
+                    }
                     throw new InvalidOperationException($"Failed to initialize services: {ex.Message}", ex);
                 }
             }

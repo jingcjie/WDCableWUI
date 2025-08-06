@@ -31,20 +31,35 @@ namespace WDCableWUI
         
         public Window? Window => _window;
         
+        private bool _serviceInitializationFailed = false;
+        private string _serviceInitializationError = string.Empty;
+        
         public App()
         {
             InitializeComponent();
             
-            // Initialize ServiceManager during app startup
+            // Initialize ServiceManager during app startup with proper error handling
             try
             {
                 ServiceManager.Initialize();
             }
+            catch (NotSupportedException ex)
+            {
+                // WiFi Direct not supported - show user-friendly message
+                System.Diagnostics.Debug.WriteLine($"WiFi Direct not supported: {ex.Message}");
+                _serviceInitializationFailed = true;
+                _serviceInitializationError = "WiFi Direct is not supported in this system, the windows version can be too low or no wireless card is installed correctly";
+                // Log the error but continue app startup
+                // Services will be null but the app should still function
+            }
             catch (Exception ex)
             {
-                // Handle initialization error
+                // Handle other initialization errors gracefully - don't crash the app
                 System.Diagnostics.Debug.WriteLine($"Failed to initialize ServiceManager: {ex.Message}");
-                throw;
+                _serviceInitializationFailed = true;
+                _serviceInitializationError = "WiFi Direct is not supported in this system, the windows version can be too low or no wireless card is installed correctly";
+                // Log the error but continue app startup
+                // Services will be null but the app should still function
             }
         }
 
@@ -56,6 +71,35 @@ namespace WDCableWUI
         {
             _window = new MainWindow();
             _window.Activate();
+            
+            // Show error dialog if service initialization failed
+            if (_serviceInitializationFailed)
+            {
+                _ = ShowServiceInitializationErrorAsync();
+            }
+        }
+        
+        private async System.Threading.Tasks.Task ShowServiceInitializationErrorAsync()
+        {
+            // Wait a bit for the window to be fully loaded
+            await System.Threading.Tasks.Task.Delay(500);
+            
+            var dialog = new ContentDialog()
+             {
+                 Title = "WiFi Direct Not Supported",
+                 Content = "WiFi Direct is not supported in this system, the windows version can be too low or no wireless card is installed correctly.",
+                 CloseButtonText = "OK",
+                 XamlRoot = _window?.Content.XamlRoot
+             };
+            
+            try
+            {
+                await dialog.ShowAsync();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Failed to show error dialog: {ex.Message}");
+            }
         }
         
         /// <summary>

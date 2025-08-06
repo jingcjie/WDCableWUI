@@ -61,8 +61,8 @@ namespace WDCableWUI.UI.Connection
         {
             try
             {
-                // Get the singleton WiFiDirectService from ServiceManager
-                _wifiDirectService = ServiceManager.WiFiDirectService;
+                // Get the singleton WiFiDirectService from ServiceManager with null checks
+                _wifiDirectService = ServiceManager.IsInitialized ? ServiceManager.WiFiDirectService : null;
                 
                 // Subscribe to events
                 if (_wifiDirectService != null)
@@ -73,16 +73,21 @@ namespace WDCableWUI.UI.Connection
                     _wifiDirectService.StatusChanged += OnStatusChanged;
                     _wifiDirectService.ErrorOccurred += OnErrorOccurred;
                     _wifiDirectService.ConnectionRequested += OnConnectionRequested;
+                    
+                    // Bind device list to ListView
+                    DeviceListView.ItemsSource = _wifiDirectService.DiscoveredDevices;
+                    _isInitialized = true;
                 }
-                
-                // Bind device list to ListView
-                DeviceListView.ItemsSource = _wifiDirectService?.DiscoveredDevices;
-                
-                _isInitialized = true;
+                else
+                {
+                    // Service not available, show appropriate message
+                    ShowError("WiFi Direct service is not available. Some features may not work.");
+                }
             }
             catch (Exception ex)
             {
                 ShowError($"Failed to initialize WiFi Direct service: {ex.Message}");
+                _wifiDirectService = null;
             }
         }
 
@@ -186,6 +191,9 @@ namespace WDCableWUI.UI.Connection
             var device = button?.Tag as WiFiDirectDevice;
             if (device == null || device.IsConnected) return;
 
+            // Disable the button to prevent multiple clicks
+            button.IsEnabled = false;
+
             try
             {
                 // Show connecting status
@@ -202,6 +210,15 @@ namespace WDCableWUI.UI.Connection
             {
                 device.Status = "Connection failed";
                 ShowError($"Error connecting to device: {ex.Message}");
+            }
+            finally
+            {
+                // Re-enable the button after connection attempt completes
+                // Only re-enable if the device is not connected (connection failed)
+                if (device != null && !device.IsConnected)
+                {
+                    button.IsEnabled = true;
+                }
             }
         }
 

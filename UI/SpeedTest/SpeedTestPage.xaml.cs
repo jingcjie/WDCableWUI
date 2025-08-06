@@ -30,9 +30,18 @@ namespace WDCableWUI.UI.SpeedTest
             _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
             TestResultsListView.ItemsSource = _testResults;
             
-            // Initialize services
-            _speedTestService = ServiceManager.SpeedTestService;
-            _connectionService = ServiceManager.ConnectionService;
+            // Initialize services with null checks
+            try
+            {
+                _speedTestService = ServiceManager.IsInitialized ? ServiceManager.SpeedTestService : null;
+                _connectionService = ServiceManager.IsInitialized ? ServiceManager.ConnectionService : null;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Failed to initialize services in SpeedTestPage: {ex.Message}");
+                _speedTestService = null;
+                _connectionService = null;
+            }
             
             // Subscribe to service events if SpeedTestService is available
             if (_speedTestService != null)
@@ -80,11 +89,17 @@ namespace WDCableWUI.UI.SpeedTest
 
         private void OnSpeedTestErrorOccurred(object sender, string error)
         {
-            // Reset test states
-            _isUploadTestRunning = false;
-            _isDownloadTestRunning = false;
-            UpdateTestButtonStates();
-            HideProgressBars();
+            _dispatcherQueue.TryEnqueue(() =>
+            {
+                // Reset test states
+                _isUploadTestRunning = false;
+                _isDownloadTestRunning = false;
+                UpdateTestButtonStates();
+                HideProgressBars();
+                
+                // Log the error for debugging
+                System.Diagnostics.Debug.WriteLine($"Speed test error: {error}");
+            });
         }
 
         private void OnSpeedTestCompleted(object sender, SpeedTestResult result)
@@ -125,29 +140,39 @@ namespace WDCableWUI.UI.SpeedTest
 
         private void UpdateConnectionStatus()
         {
-            bool isConnected = _connectionService?.IsConnected ?? false;
-            bool hasSpeedTestConnection = _speedTestService?.IsConnected ?? false;
-            
-            if (isConnected && hasSpeedTestConnection)
+            try
             {
-                ConnectionIcon.Glyph = "\uE774"; // Connected icon
-                ConnectionIcon.Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["SystemFillColorSuccessBrush"];
-                ConnectionStatusText.Text = "Connected";
-                ConnectionDetailsText.Text = "Speed test connection is ready";
+                bool isConnected = _connectionService?.IsConnected ?? false;
+                bool hasSpeedTestConnection = _speedTestService?.IsConnected ?? false;
+                
+                if (isConnected && hasSpeedTestConnection)
+                {
+                    ConnectionIcon.Glyph = "\uE774"; // Connected icon
+                    ConnectionIcon.Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["SystemFillColorSuccessBrush"];
+                    ConnectionStatusText.Text = "Connected";
+                    ConnectionDetailsText.Text = "Speed test connection is ready";
+                }
+                else if (isConnected)
+                {
+                    ConnectionIcon.Glyph = "\uE783"; // Warning icon
+                    ConnectionIcon.Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["SystemFillColorCautionBrush"];
+                    ConnectionStatusText.Text = "Partially Connected";
+                    ConnectionDetailsText.Text = "Main connection established, speed test connection pending";
+                }
+                else
+                {
+                    ConnectionIcon.Glyph = "\uE774"; // Disconnected icon
+                    ConnectionIcon.Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["SystemFillColorCriticalBrush"];
+                    ConnectionStatusText.Text = "Not Connected";
+                    ConnectionDetailsText.Text = "Establish a connection to begin speed testing";
+                }
             }
-            else if (isConnected)
+            catch (Exception ex)
             {
-                ConnectionIcon.Glyph = "\uE783"; // Warning icon
-                ConnectionIcon.Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["SystemFillColorCautionBrush"];
-                ConnectionStatusText.Text = "Partially Connected";
-                ConnectionDetailsText.Text = "Main connection established, speed test connection pending";
-            }
-            else
-            {
-                ConnectionIcon.Glyph = "\uE774"; // Disconnected icon
-                ConnectionIcon.Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["SystemFillColorCriticalBrush"];
-                ConnectionStatusText.Text = "Not Connected";
-                ConnectionDetailsText.Text = "Establish a connection to begin speed testing";
+                System.Diagnostics.Debug.WriteLine($"Failed to update connection status in SpeedTestPage: {ex.Message}");
+                // Set safe defaults
+                if (ConnectionStatusText != null) ConnectionStatusText.Text = "Service Unavailable";
+                if (ConnectionDetailsText != null) ConnectionDetailsText.Text = "Speed test service is not available";
             }
         }
 
@@ -214,6 +239,12 @@ namespace WDCableWUI.UI.SpeedTest
                 
                 try
                 {
+                    // Double-check service availability before starting
+                    if (_speedTestService == null || !_speedTestService.IsConnected)
+                    {
+                        throw new InvalidOperationException("Speed test service is not available or not connected");
+                    }
+                    
                     await _speedTestService.PerformUploadTest(sizeBytes);
                 }
                 catch (Exception ex)
@@ -221,6 +252,8 @@ namespace WDCableWUI.UI.SpeedTest
                     _isUploadTestRunning = false;
                     UpdateTestButtonStates();
                     UploadProgressBar.Visibility = Visibility.Collapsed;
+                    
+                    System.Diagnostics.Debug.WriteLine($"Upload test failed: {ex.Message}");
                     
                     var dialog = new ContentDialog
                     {
@@ -251,6 +284,12 @@ namespace WDCableWUI.UI.SpeedTest
                 
                 try
                 {
+                    // Double-check service availability before starting
+                    if (_speedTestService == null || !_speedTestService.IsConnected)
+                    {
+                        throw new InvalidOperationException("Speed test service is not available or not connected");
+                    }
+                    
                     await _speedTestService.PerformDownloadTest(sizeBytes);
                 }
                 catch (Exception ex)
@@ -258,6 +297,8 @@ namespace WDCableWUI.UI.SpeedTest
                     _isDownloadTestRunning = false;
                     UpdateTestButtonStates();
                     DownloadProgressBar.Visibility = Visibility.Collapsed;
+                    
+                    System.Diagnostics.Debug.WriteLine($"Download test failed: {ex.Message}");
                     
                     var dialog = new ContentDialog
                     {

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices.WindowsRuntime;
+using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
@@ -105,10 +106,22 @@ namespace WDCableWUI
         
         private void SubscribeToWiFiDirectEvents()
         {
-            if (ServiceManager.IsInitialized && ServiceManager.WiFiDirectService != null)
+            try
             {
-                ServiceManager.WiFiDirectService.DeviceConnected += OnWiFiDirectDeviceConnected;
-                ServiceManager.WiFiDirectService.DeviceDisconnected += OnWiFiDirectDeviceDisconnected;
+                if (ServiceManager.IsInitialized && ServiceManager.WiFiDirectService != null)
+                {
+                    ServiceManager.WiFiDirectService.DeviceConnected += OnWiFiDirectDeviceConnected;
+                    ServiceManager.WiFiDirectService.DeviceDisconnected += OnWiFiDirectDeviceDisconnected;
+                }
+                
+                if (ServiceManager.IsInitialized && ServiceManager.ConnectionService != null)
+                {
+                    ServiceManager.ConnectionService.OtherSideNotRunningApp += OnOtherSideNotRunningApp;
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Failed to subscribe to WiFiDirect events: {ex.Message}");
             }
         }
         
@@ -150,10 +163,51 @@ namespace WDCableWUI
         
         private void UnsubscribeFromWiFiDirectEvents()
         {
-            if (ServiceManager.IsInitialized && ServiceManager.WiFiDirectService != null)
+            try
             {
-                ServiceManager.WiFiDirectService.DeviceConnected -= OnWiFiDirectDeviceConnected;
-                ServiceManager.WiFiDirectService.DeviceDisconnected -= OnWiFiDirectDeviceDisconnected;
+                if (ServiceManager.IsInitialized && ServiceManager.WiFiDirectService != null)
+                {
+                    ServiceManager.WiFiDirectService.DeviceConnected -= OnWiFiDirectDeviceConnected;
+                    ServiceManager.WiFiDirectService.DeviceDisconnected -= OnWiFiDirectDeviceDisconnected;
+                }
+                
+                if (ServiceManager.IsInitialized && ServiceManager.ConnectionService != null)
+                {
+                    ServiceManager.ConnectionService.OtherSideNotRunningApp -= OnOtherSideNotRunningApp;
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Failed to unsubscribe from WiFiDirect events: {ex.Message}");
+            }
+        }
+        
+        private async void OnOtherSideNotRunningApp(object? sender, EventArgs e)
+        {
+            // Ensure UI updates happen on the UI thread
+            DispatcherQueue.TryEnqueue(async () =>
+            {
+                await ShowOtherSideNotRunningAppDialog();
+            });
+        }
+        
+        private async Task ShowOtherSideNotRunningAppDialog()
+        {
+            try
+            {
+                var dialog = new ContentDialog()
+                {
+                    Title = "Connection Issue",
+                    Content = "The other device does not appear to be running this application. The connection will be terminated.",
+                    CloseButtonText = "OK",
+                    XamlRoot = this.Content.XamlRoot
+                };
+                
+                await dialog.ShowAsync();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Failed to show dialog: {ex.Message}");
             }
         }
         

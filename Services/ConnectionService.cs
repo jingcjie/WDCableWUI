@@ -42,6 +42,7 @@ namespace WDCableWUI.Services
         public event EventHandler<string>? StatusChanged;
         public event EventHandler<string>? ErrorOccurred;
         public event EventHandler? ConnectionsEstablished;
+        public event EventHandler? OtherSideNotRunningApp;
         
         // Properties
         public bool IsInitialized => _isInitialized;
@@ -50,6 +51,23 @@ namespace WDCableWUI.Services
         public TcpClient? ChatConnection => _chatClient;
         public TcpClient? SpeedTestConnection => _speedTestClient;
         public TcpClient? FileConnection => _fileClient;
+        
+        /// <summary>
+        /// Checks if all TCP connections (Chat, SpeedTest, and File) are healthy and connected.
+        /// </summary>
+        /// <returns>True if all connections are established and connected, false otherwise.</returns>
+        public bool IsConnectionHealthy()
+        {
+            lock (_connectionLock)
+            {
+                // Check if all connections exist and are still connected
+                bool chatHealthy = _chatClient != null && _chatClient.Connected;
+                bool speedTestHealthy = _speedTestClient != null && _speedTestClient.Connected;
+                bool fileHealthy = _fileClient != null && _fileClient.Connected;
+                
+                return chatHealthy && speedTestHealthy && fileHealthy;
+            }
+        }
         
         private ConnectionService()
         {
@@ -106,6 +124,14 @@ namespace WDCableWUI.Services
             {
                 OnStatusChanged("WiFi Direct connected. Initializing TCP connections...");
                 await InitializeConnectionsAsync();
+                
+                // Wait 6 seconds and check if connection is healthy
+                await Task.Delay(6000);
+                if (!IsConnectionHealthy())
+                {
+                    OnStatusChanged("Connection health check failed - other side may not be running this app");
+                    OnOtherSideNotRunningApp();
+                }
             }
             catch (Exception ex)
             {
@@ -355,6 +381,11 @@ namespace WDCableWUI.Services
         private void OnErrorOccurred(string error)
         {
             _dispatcherQueue?.TryEnqueue(() => ErrorOccurred?.Invoke(this, error));
+        }
+        
+        private void OnOtherSideNotRunningApp()
+        {
+            _dispatcherQueue?.TryEnqueue(() => OtherSideNotRunningApp?.Invoke(this, EventArgs.Empty));
         }
     }
 }

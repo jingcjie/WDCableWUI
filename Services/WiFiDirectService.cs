@@ -65,6 +65,20 @@ namespace WDCableWUI.Services
             _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
         }
 
+        public void SetConnectionService(ConnectionService connectionService)
+        {
+            if (connectionService != null)
+            {
+                connectionService.OtherSideNotRunningApp += OnOtherSideNotRunningApp;
+            }
+        }
+
+        private async void OnOtherSideNotRunningApp(object? sender, EventArgs e)
+        {
+            OnStatusChanged("Other side is not running the app. Disconnecting...");
+            await DisconnectAsync();
+        }
+
         public Task<bool> StartAdvertisingAsync(string deviceName = "WDCableWUI Device")
         {
             try

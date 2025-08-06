@@ -9,6 +9,14 @@
 
 This repository contains the Windows version of WDCable, built with WinUI 3 for a modern and native user experience.
 
+## 📦 Download
+
+<a href="https://apps.microsoft.com/store/detail/9MZQMRHFFJJW?cid=DevShareMCLPCS">
+  <img src="https://get.microsoft.com/images/en-us%20dark.svg" alt="Get it from Microsoft Store" width="200"/>
+</a>
+
+*Available now on the Microsoft Store for Windows 10 and Windows 11*
+
 ## 📸 Screenshots
 
 | Feature | Screenshot |

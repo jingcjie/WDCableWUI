@@ -63,9 +63,9 @@
                                       TextWrapping="Wrap"/>
                             
                             <ToggleSwitch x:Name="DiscoverableToggle"
-                                         Header="Make device discoverable"
-                                         OnContent="Discoverable"
-                                         OffContent="Hidden"
+                                         Header="Accept Invitation"
+                                         OnContent="Accept"
+                                         OffContent="Reject"
                                          Toggled="OnDiscoverableToggled"/>
                         </StackPanel>
 

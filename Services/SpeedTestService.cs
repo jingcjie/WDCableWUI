@@ -51,6 +51,10 @@ namespace WDCableWUI.Services
             }
         }
         
+        private TcpClient? _lastValidConnection;
+        private DateTime _lastConnectionCheckTime = DateTime.MinValue;
+        private bool _connectionInvalidLogged = false;
+        
         /// <summary>
         /// Gets the current speed test connection from the ConnectionService.
         /// Returns null if no connection is available or if the connection is no longer valid.
@@ -69,12 +73,32 @@ namespace WDCableWUI.Services
                     
                     var speedTestConnection = connectionService.SpeedTestConnection;
                     
+                    // If we have a new connection, reset the logging flag
+                    if (speedTestConnection != _lastValidConnection)
+                    {
+                        _lastValidConnection = speedTestConnection;
+                        _connectionInvalidLogged = false;
+                    }
+                    
                     // Check if connection is still valid
                     if (speedTestConnection != null && !IsConnectionValid(speedTestConnection))
                     {
-                        OnStatusChanged("Speed test connection is no longer valid, attempting to re-obtain connection");
+                        // Only log the message once per connection and throttle the checks
+                        var now = DateTime.UtcNow;
+                        if (!_connectionInvalidLogged || (now - _lastConnectionCheckTime).TotalSeconds > 5)
+                        {
+                            OnStatusChanged("Speed test connection is no longer valid, attempting to re-obtain connection");
+                            _connectionInvalidLogged = true;
+                            _lastConnectionCheckTime = now;
+                        }
                         // The connection will be re-established by the ConnectionService
                         return null;
+                    }
+                    
+                    // Reset the flag if connection is valid
+                    if (speedTestConnection != null)
+                    {
+                        _connectionInvalidLogged = false;
                     }
                     
                     return speedTestConnection;
@@ -310,8 +334,7 @@ namespace WDCableWUI.Services
                     var remainingBytes = sizeBytes - totalSent;
                     var bytesToSend = (int)Math.Min(BUFFER_SIZE, remainingBytes);
                     
-                    // await stream.WriteAsync(buffer, 0, bytesToSend);
-                    stream.Write(buffer, 0, bytesToSend);
+                    await stream.WriteAsync(buffer, 0, bytesToSend);
 
                     totalSent += bytesToSend;
                     
@@ -439,6 +462,9 @@ namespace WDCableWUI.Services
           /// <param name="cancellationToken">Token to cancel the listening operation</param>
           private async Task ListenForIncomingData(CancellationToken cancellationToken)
           {
+              int consecutiveFailures = 0;
+              const int maxConsecutiveFailures = 5;
+              
               try
               {
                   while (!cancellationToken.IsCancellationRequested)
@@ -446,39 +472,74 @@ namespace WDCableWUI.Services
                       var connection = SpeedTestConnection;
                       if (connection == null || !connection.Connected)
                       {
-                          await Task.Delay(1000, cancellationToken); // Wait before retrying
+                          consecutiveFailures++;
+                          
+                          // Exponential backoff for connection failures
+                          var delay = Math.Min(1000 * (int)Math.Pow(2, Math.Min(consecutiveFailures - 1, 4)), 30000);
+                          
+                          // If we've had too many consecutive failures, stop trying for a while
+                          if (consecutiveFailures >= maxConsecutiveFailures)
+                          {
+                              OnStatusChanged("Too many connection failures, pausing listener for 30 seconds");
+                              await Task.Delay(30000, cancellationToken);
+                              consecutiveFailures = 0; // Reset after long pause
+                          }
+                          else
+                          {
+                              await Task.Delay(delay, cancellationToken);
+                          }
                           continue;
                       }
                       
-                      var stream = connection.GetStream();
+                      // Reset failure counter on successful connection
+                      consecutiveFailures = 0;
                       
-                      // Read header until newline
-                      var headerBytes = new List<byte>();
-                      int byteRead;
-                      
-                      while ((byteRead = stream.ReadByte()) != -1)
+                      try
                       {
-                          if (cancellationToken.IsCancellationRequested)
-                              return;
-                              
-                          if (byteRead == '\n')
+                          var stream = connection.GetStream();
+                          
+                          // Read header until newline
+                          var headerBytes = new List<byte>();
+                          int byteRead;
+                          
+                          while ((byteRead = stream.ReadByte()) != -1)
                           {
-                              break; // Found newline, header complete
+                              if (cancellationToken.IsCancellationRequested)
+                                  return;
+                                  
+                              if (byteRead == '\n')
+                              {
+                                  break; // Found newline, header complete
+                              }
+                              
+                              headerBytes.Add((byte)byteRead);
                           }
                           
-                          headerBytes.Add((byte)byteRead);
+                          if (headerBytes.Count == 0)
+                          {
+                              continue; // No header received
+                          }
+                          
+                          var headerMessage = Encoding.UTF8.GetString(headerBytes.ToArray());
+                          
+                          // Parse and handle the message
+                          await HandleIncomingMessage(headerMessage, stream, cancellationToken);
                       }
-                      
-                      if (headerBytes.Count == 0)
+                      catch (IOException) when (!cancellationToken.IsCancellationRequested)
                       {
-                          continue; // No header received
+                          // Connection was lost, will be handled in next iteration
+                          consecutiveFailures++;
                       }
-                      
-                      var headerMessage = Encoding.UTF8.GetString(headerBytes.ToArray());
-                      
-                      // Parse and handle the message
-                      await HandleIncomingMessage(headerMessage, stream, cancellationToken);
+                      catch (ObjectDisposedException) when (!cancellationToken.IsCancellationRequested)
+                      {
+                          // Connection was disposed, will be handled in next iteration
+                          consecutiveFailures++;
+                      }
                   }
+              }
+              catch (OperationCanceledException)
+              {
+                  // Expected when cancellation is requested
               }
               catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
               {
@@ -688,6 +749,15 @@ namespace WDCableWUI.Services
             {
                 // Stop listening for requests
                 StopListening();
+                
+                // Reset connection state
+                _lastValidConnection = null;
+                _connectionInvalidLogged = false;
+                _lastConnectionCheckTime = DateTime.MinValue;
+                
+                // Reset download test state
+                _isDownloadTestInProgress = false;
+                _expectedDownloadSize = 0;
                 
                 // Unsubscribe from ConnectionService events
                 var connectionService = ServiceManager.ConnectionService;
