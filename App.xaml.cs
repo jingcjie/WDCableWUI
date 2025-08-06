@@ -16,6 +16,8 @@ using Windows.ApplicationModel.Activation;
 using Windows.Foundation;
 using Windows.Foundation.Collections;
 using WDCableWUI.Services;
+using Windows.Globalization;
+using Windows.Storage;
 
 // To learn more about WinUI, the WinUI project structure,
 // and more about our project templates, see: http://aka.ms/winui-project-info.
@@ -30,6 +32,7 @@ namespace WDCableWUI
         private Window? _window;
         
         public Window? Window => _window;
+        public static MainWindow? MainWindow { get; private set; }
         
         private bool _serviceInitializationFailed = false;
         private string _serviceInitializationError = string.Empty;
@@ -37,6 +40,12 @@ namespace WDCableWUI
         public App()
         {
             InitializeComponent();
+            
+            // Initialize localization
+            InitializeLocalization();
+            
+            // Initialize theme
+            InitializeTheme();
             
             // Initialize ServiceManager during app startup with proper error handling
             try
@@ -63,6 +72,52 @@ namespace WDCableWUI
             }
         }
 
+        private void InitializeLocalization()
+        {
+            try
+            {
+                var localSettings = ApplicationData.Current.LocalSettings;
+                var savedLanguage = localSettings.Values["AppLanguage"] as string;
+                
+                System.Diagnostics.Debug.WriteLine($"Initializing localization with saved language: {savedLanguage}");
+                
+                if (!string.IsNullOrEmpty(savedLanguage) && savedLanguage != "system")
+                {
+                    ApplicationLanguages.PrimaryLanguageOverride = savedLanguage;
+                    System.Diagnostics.Debug.WriteLine($"Applied language override: {savedLanguage}");
+                }
+                else
+                {
+                    // Clear any previous language override to use system language
+                    ApplicationLanguages.PrimaryLanguageOverride = "";
+                    System.Diagnostics.Debug.WriteLine("Using system language");
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Failed to initialize localization: {ex.Message}");
+            }
+        }
+        
+        private void InitializeTheme()
+        {
+            try
+            {
+                var localSettings = ApplicationData.Current.LocalSettings;
+                var savedTheme = localSettings.Values["AppTheme"] as string;
+                
+                if (!string.IsNullOrEmpty(savedTheme) && savedTheme != "default")
+                {
+                    // Theme will be applied after the window is created
+                    // Store the theme preference for later application
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Failed to initialize theme: {ex.Message}");
+            }
+        }
+
         /// <summary>
         /// Invoked when the application is launched.
         /// </summary>
@@ -70,6 +125,7 @@ namespace WDCableWUI
         protected override void OnLaunched(Microsoft.UI.Xaml.LaunchActivatedEventArgs args)
         {
             _window = new MainWindow();
+            MainWindow = _window as MainWindow;
             _window.Activate();
             
             // Show error dialog if service initialization failed

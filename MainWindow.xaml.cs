@@ -17,6 +17,7 @@ using WDCableWUI.UI.Connection;
 using WDCableWUI.UI.Chat;
 using WDCableWUI.UI.SpeedTest;
 using WDCableWUI.UI.FileTransfer;
+using WDCableWUI.UI.Settings;
 using Microsoft.UI.Windowing;
 using Microsoft.UI;
 using WinRT.Interop;
@@ -37,6 +38,9 @@ namespace WDCableWUI
         {
             InitializeComponent();
             
+            // Apply saved theme
+            ApplySavedTheme();
+            
             // Configure custom title bar
             SetupCustomTitleBar();
             Debug.WriteLine("Sample Debug message: MainWindow initialized");
@@ -46,12 +50,14 @@ namespace WDCableWUI
                 { "Connection", typeof(ConnectionPage) },
                 { "Chat", typeof(ChatPage) },
                 { "SpeedTest", typeof(SpeedTestPage) },
-                { "FileTransfer", typeof(FileTransferPage) }
+                { "FileTransfer", typeof(FileTransferPage) },
+                { "Settings", typeof(SettingsPage) }
             };
             
             // Set default page
             MainNavigationView.SelectedItem = MainNavigationView.MenuItems[0];
             NavigateToPage("Connection");
+            PageTitle.Text = GetLocalizedPageTitle("Connection");
             
             // Initialize status
             UpdateConnectionStatus(false);
@@ -91,7 +97,7 @@ namespace WDCableWUI
                 if (!string.IsNullOrEmpty(tag))
                 {
                     NavigateToPage(tag);
-                    PageTitle.Text = selectedItem.Content?.ToString() ?? tag;
+                    PageTitle.Text = GetLocalizedPageTitle(tag);
                 }
             }
         }
@@ -101,6 +107,21 @@ namespace WDCableWUI
             if (_pageTypes.TryGetValue(pageTag, out Type? pageType))
             {
                 ContentFrame.Navigate(pageType);
+            }
+        }
+        
+        private string GetLocalizedPageTitle(string pageTag)
+        {
+            try
+            {
+                var resourceLoader = Windows.ApplicationModel.Resources.ResourceLoader.GetForCurrentView();
+                var resourceKey = $"MainWindow_PageTitle_{pageTag}";
+                var localizedTitle = resourceLoader.GetString(resourceKey);
+                return !string.IsNullOrEmpty(localizedTitle) ? localizedTitle : pageTag;
+            }
+            catch
+            {
+                return pageTag;
             }
         }
         
@@ -211,5 +232,34 @@ namespace WDCableWUI
             }
         }
         
+        private void ApplySavedTheme()
+        {
+            try
+            {
+                var localSettings = Windows.Storage.ApplicationData.Current.LocalSettings;
+                var savedTheme = localSettings.Values["AppTheme"] as string ?? "default";
+                
+                if (this.Content is FrameworkElement rootElement)
+                {
+                    switch (savedTheme)
+                    {
+                        case "light":
+                            rootElement.RequestedTheme = ElementTheme.Light;
+                            break;
+                        case "dark":
+                            rootElement.RequestedTheme = ElementTheme.Dark;
+                            break;
+                        case "default":
+                        default:
+                            rootElement.RequestedTheme = ElementTheme.Default;
+                            break;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Failed to apply saved theme: {ex.Message}");
+            }
+        }
     }
 }

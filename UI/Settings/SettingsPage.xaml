@@ -1,0 +1,174 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="WDCableWUI.UI.Settings.SettingsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:WDCableWUI.UI.Settings"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+
+    <ScrollViewer>
+        <StackPanel Margin="24" Spacing="24">
+            <TextBlock x:Uid="Settings_Title"
+                      Style="{StaticResource SubtitleTextBlockStyle}"
+                      Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+            
+            <TextBlock x:Uid="Settings_Description"
+                      Style="{StaticResource CaptionTextBlockStyle}"
+                      Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+
+            <!-- Appearance Section -->
+            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                   BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                   BorderThickness="1"
+                   CornerRadius="8"
+                   Padding="24">
+                <StackPanel Spacing="16">
+                    <StackPanel Spacing="4">
+                        <TextBlock x:Uid="Settings_Appearance_Title"
+                                  Style="{StaticResource SubtitleTextBlockStyle}"/>
+                        <TextBlock x:Uid="Settings_Appearance_Description"
+                                  Style="{StaticResource CaptionTextBlockStyle}"
+                                  Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                    </StackPanel>
+                    
+                    <ComboBox x:Name="ThemeComboBox"
+                             x:Uid="Settings_Theme_ComboBox"
+                             MinWidth="200"
+                             SelectionChanged="ThemeComboBox_SelectionChanged">
+                        <ComboBoxItem x:Name="DefaultThemeItem" x:Uid="Settings_Theme_Default" Tag="default"/>
+                        <ComboBoxItem x:Name="LightThemeItem" x:Uid="Settings_Theme_Light" Tag="light"/>
+                        <ComboBoxItem x:Name="DarkThemeItem" x:Uid="Settings_Theme_Dark" Tag="dark"/>
+                    </ComboBox>
+                </StackPanel>
+            </Border>
+
+            <!-- Language Section -->
+            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                   BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                   BorderThickness="1"
+                   CornerRadius="8"
+                   Padding="24">
+                <StackPanel Spacing="16">
+                    <StackPanel Spacing="4">
+                        <TextBlock x:Uid="Settings_Language_Title"
+                                  Style="{StaticResource SubtitleTextBlockStyle}"/>
+                        <TextBlock x:Uid="Settings_Language_Description"
+                                  Style="{StaticResource CaptionTextBlockStyle}"
+                                  Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                    </StackPanel>
+                    
+                    <ComboBox x:Name="LanguageComboBox"
+                             x:Uid="Settings_Language_ComboBox"
+                             MinWidth="200"
+                             SelectionChanged="LanguageComboBox_SelectionChanged">
+                        <ComboBoxItem x:Name="FollowSystemItem" x:Uid="Settings_Language_FollowSystem" Tag="system"/>
+                        <ComboBoxItem x:Name="EnglishItem" x:Uid="Settings_Language_English" Tag="en"/>
+                        <ComboBoxItem x:Name="ChineseItem" x:Uid="Settings_Language_Chinese" Tag="zh-CN"/>
+                    </ComboBox>
+                </StackPanel>
+            </Border>
+
+            <!-- GitHub Repository Section -->
+            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                   BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                   BorderThickness="1"
+                   CornerRadius="8"
+                   Padding="24">
+                <StackPanel Spacing="16">
+                    <StackPanel Spacing="4">
+                        <TextBlock x:Uid="Settings_GitHub_Title"
+                                  Style="{StaticResource SubtitleTextBlockStyle}"/>
+                        <TextBlock x:Uid="Settings_GitHub_Description"
+                                  Style="{StaticResource CaptionTextBlockStyle}"
+                                  Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                    </StackPanel>
+                    
+                    <StackPanel Spacing="12">
+                        <!-- Windows Version Repository -->
+                        <Button x:Name="WindowsRepoButton"
+                               Click="WindowsRepoButton_Click"
+                               HorizontalAlignment="Stretch"
+                               HorizontalContentAlignment="Left"
+                               Background="Transparent"
+                               BorderThickness="1"
+                               BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                               CornerRadius="4"
+                               Padding="16,12">
+                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                <FontIcon Glyph="&#xE774;" FontSize="16" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
+                                <StackPanel>
+                                    <TextBlock x:Uid="Settings_GitHub_Windows_Title"
+                                              Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                    <TextBlock x:Uid="Settings_GitHub_Windows_Description"
+                                              Style="{StaticResource CaptionTextBlockStyle}"
+                                              Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Button>
+                        
+                        <!-- Android Version Repository -->
+                        <Button x:Name="AndroidRepoButton"
+                               Click="AndroidRepoButton_Click"
+                               HorizontalAlignment="Stretch"
+                               HorizontalContentAlignment="Left"
+                               Background="Transparent"
+                               BorderThickness="1"
+                               BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                               CornerRadius="4"
+                               Padding="16,12">
+                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                <FontIcon Glyph="&#xE8EA;" FontSize="16" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
+                                <StackPanel>
+                                    <TextBlock x:Uid="Settings_GitHub_Android_Title"
+                                              Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                    <TextBlock x:Uid="Settings_GitHub_Android_Description"
+                                              Style="{StaticResource CaptionTextBlockStyle}"
+                                              Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- About Section -->
+            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                   BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                   BorderThickness="1"
+                   CornerRadius="8"
+                   Padding="24">
+                <StackPanel Spacing="16">
+                    <StackPanel Spacing="4">
+                        <TextBlock x:Uid="Settings_About_Title"
+                                  Style="{StaticResource SubtitleTextBlockStyle}"/>
+                        <TextBlock x:Uid="Settings_About_Description"
+                                  Style="{StaticResource CaptionTextBlockStyle}"
+                                  Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                    </StackPanel>
+                    
+                    <StackPanel Spacing="12">
+                        <StackPanel Orientation="Horizontal" Spacing="12">
+                            <Image Source="/Assets/Square44x44Logo.png" Width="32" Height="32"/>
+                            <StackPanel>
+                                <TextBlock x:Uid="Settings_About_AppName"
+                                          Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                <TextBlock x:Name="VersionTextBlock"
+                                          x:Uid="Settings_About_Version"
+                                          Style="{StaticResource CaptionTextBlockStyle}"
+                                          Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                            </StackPanel>
+                        </StackPanel>
+                        
+                        <TextBlock x:Uid="Settings_About_Copyright"
+                                  Style="{StaticResource CaptionTextBlockStyle}"
+                                  Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+        </StackPanel>
+    </ScrollViewer>
+</Page>

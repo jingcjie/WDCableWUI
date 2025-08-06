@@ -79,17 +79,18 @@
                 </Grid.ColumnDefinitions>
                 
                 <StackPanel Grid.Column="0">
-                    <TextBlock Text="Chat Communication"
-                              Style="{StaticResource SubtitleTextBlockStyle}"
-                              Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
-                    <TextBlock Text="Send and receive messages with the connected device"
-                              Style="{StaticResource CaptionTextBlockStyle}"
-                              Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                    <TextBlock x:Uid="Chat_Title"
+                      Style="{StaticResource SubtitleTextBlockStyle}"
+                      Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+            
+            <TextBlock x:Uid="Chat_Description"
+                      Style="{StaticResource CaptionTextBlockStyle}"
+                      Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                 </StackPanel>
                 
                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                     <TextBlock x:Name="ConnectionStatusText"
-                              Text="Disconnected"
+                              x:Uid="Chat_Status_Disconnected"
                               Style="{StaticResource CaptionTextBlockStyle}"
                               Foreground="{ThemeResource SystemFillColorCriticalBrush}"/>
                 </StackPanel>
@@ -131,11 +132,11 @@
                              Glyph="&#xE8BD;"
                              FontSize="48"
                              Foreground="{ThemeResource TextFillColorTertiaryBrush}"/>
-                    <TextBlock Text="No messages yet"
+                    <TextBlock x:Uid="Chat_NoMessages_Title"
                               Style="{StaticResource BodyTextBlockStyle}"
                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                               HorizontalAlignment="Center"/>
-                    <TextBlock Text="Start a conversation by typing a message below"
+                    <TextBlock x:Uid="Chat_NoMessages_Description"
                               Style="{StaticResource CaptionTextBlockStyle}"
                               Foreground="{ThemeResource TextFillColorTertiaryBrush}"
                               HorizontalAlignment="Center"/>
@@ -153,11 +154,11 @@
                                  Glyph="&#xE703;"
                                  FontSize="48"
                                  Foreground="{ThemeResource SystemFillColorCriticalBrush}"/>
-                        <TextBlock Text="WiFi Direct Connection Required"
+                        <TextBlock x:Uid="Chat_ConnectionRequired_Title"
                                   Style="{StaticResource SubtitleTextBlockStyle}"
                                   Foreground="{ThemeResource TextFillColorPrimaryBrush}"
                                   HorizontalAlignment="Center"/>
-                        <TextBlock Text="Please establish a WiFi Direct connection to start chatting"
+                        <TextBlock x:Uid="Chat_ConnectionRequired_Description"
                                   Style="{StaticResource BodyTextBlockStyle}"
                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                   HorizontalAlignment="Center"
@@ -183,7 +184,7 @@
                 
                 <TextBox x:Name="MessageTextBox"
                         Grid.Column="0"
-                        PlaceholderText="Type a message..."
+                        x:Uid="Chat_MessageInput"
                         AcceptsReturn="True"
                         TextWrapping="Wrap"
                         MaxHeight="120"

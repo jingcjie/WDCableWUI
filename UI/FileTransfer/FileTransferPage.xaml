@@ -17,12 +17,13 @@
 
             <!-- Header -->
             <StackPanel Grid.Row="0" Spacing="8" Margin="0,0,0,24">
-                <TextBlock Text="File Transfer"
-                          Style="{StaticResource SubtitleTextBlockStyle}"
-                          Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
-                <TextBlock Text="Send and receive files with the connected device"
-                          Style="{StaticResource CaptionTextBlockStyle}"
-                          Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                <TextBlock x:Uid="FileTransfer_Title"
+                      Style="{StaticResource SubtitleTextBlockStyle}"
+                      Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+            
+            <TextBlock x:Uid="FileTransfer_Description"
+                      Style="{StaticResource CaptionTextBlockStyle}"
+                      Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
             </StackPanel>
 
             <!-- Main Content -->
@@ -48,7 +49,7 @@
                                          Glyph="&#xE8B5;"
                                          FontSize="20"
                                          Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
-                                <TextBlock Text="Send Files"
+                                <TextBlock x:Uid="FileTransfer_Send_Title"
                                           Style="{StaticResource BodyStrongTextBlockStyle}"/>
                             </StackPanel>
                             
@@ -67,7 +68,7 @@
                                               Glyph="&#xE8E5;"
                                               FontSize="24"
                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-                                     <TextBlock Text="Drag a file here or click to browse"
+                                     <TextBlock x:Uid="FileTransfer_DragDrop_Description"
                                                Style="{StaticResource CaptionTextBlockStyle}"
                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                                  </StackPanel>
@@ -75,7 +76,7 @@
                             
                             <!-- File Selection Button -->
                              <Button x:Name="BrowseFileButton"
-                                    Content="Browse File"
+                                    x:Uid="FileTransfer_Browse_Button"
                                     Style="{StaticResource AccentButtonStyle}"
                                     HorizontalAlignment="Left"
                                     Click="BrowseFileButton_Click">
@@ -99,7 +100,7 @@
                             
                             <!-- Selected File Display -->
                              <StackPanel x:Name="SelectedFilePanel" Spacing="8" Visibility="Collapsed">
-                                 <TextBlock Text="Selected File:"
+                                 <TextBlock x:Uid="FileTransfer_SelectedFile_Label"
                                            Style="{StaticResource CaptionTextBlockStyle}"
                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                                  <Border Background="{ThemeResource ControlFillColorDefaultBrush}"
@@ -137,7 +138,7 @@
                              
                              <!-- Send Button -->
                               <Button x:Name="SendFileButton"
-                                     Content="Send File"
+                                     x:Uid="FileTransfer_Send_Button"
                                      HorizontalAlignment="Left"
                                      IsEnabled="False"
                                      Click="SendFileButton_Click">
@@ -212,12 +213,12 @@
                                          Glyph="&#xE896;"
                                          FontSize="20"
                                          Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
-                                <TextBlock Text="Receive Settings"
+                                <TextBlock x:Uid="FileTransfer_Receive_Title"
                                           Style="{StaticResource BodyStrongTextBlockStyle}"/>
                             </StackPanel>
                             
                             <StackPanel Spacing="8">
-                                <TextBlock Text="Download Location:"
+                                <TextBlock x:Uid="FileTransfer_DownloadLocation_Label"
                                           Style="{StaticResource CaptionTextBlockStyle}"/>
                                 <Grid>
                                     <Grid.ColumnDefinitions>
@@ -231,12 +232,12 @@
                                             TextChanged="DownloadLocationTextBox_TextChanged"/>
                                     <Button x:Name="BrowseDownloadLocationButton"
                                            Grid.Column="1"
-                                           Content="Browse"
+                                           x:Uid="FileTransfer_Browse_Button"
                                            Click="BrowseDownloadLocationButton_Click"/>
                                 </Grid>
                             </StackPanel>
                             
-                            <TextBlock Text="Files will be automatically received when the app is running."
+                            <TextBlock x:Uid="FileTransfer_AutoReceive_Description"
                                        Style="{StaticResource CaptionTextBlockStyle}"
                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                         </StackPanel>
@@ -256,23 +257,23 @@
                                      Glyph="&#xE81C;"
                                      FontSize="20"
                                      Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
-                            <TextBlock Text="Transfer Records"
+                            <TextBlock x:Uid="FileTransfer_Records_Title"
                                       Style="{StaticResource BodyStrongTextBlockStyle}"/>
                         </StackPanel>
                         
                         <!-- Filter Buttons -->
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <ToggleButton x:Name="ShowAllToggle"
-                                         Content="All"
+                                         x:Uid="FileTransfer_Filter_All"
                                          IsChecked="True"
                                          Click="FilterToggle_Click"
                                          Tag="All"/>
                             <ToggleButton x:Name="ShowSentToggle"
-                                         Content="Sent"
+                                         x:Uid="FileTransfer_Filter_Sent"
                                          Click="FilterToggle_Click"
                                          Tag="Sent"/>
                             <ToggleButton x:Name="ShowReceivedToggle"
-                                         Content="Received"
+                                         x:Uid="FileTransfer_Filter_Received"
                                          Click="FilterToggle_Click"
                                          Tag="Received"/>
                         </StackPanel>

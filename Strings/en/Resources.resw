@@ -1,0 +1,352 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="metadata">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" />
+              </xsd:sequence>
+              <xsd:attribute name="name" use="required" type="xsd:string" />
+              <xsd:attribute name="type" type="xsd:string" />
+              <xsd:attribute name="mimetype" type="xsd:string" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="assembly">
+            <xsd:complexType>
+              <xsd:attribute name="alias" type="xsd:string" />
+              <xsd:attribute name="name" type="xsd:string" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+              </xsd:sequence>
+              <xsd:attribute name="name" use="required" type="xsd:string" />
+              <xsd:attribute name="type" type="xsd:string" />
+              <xsd:attribute name="mimetype" type="xsd:string" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="resheader">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" use="required" type="xsd:string" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  
+  <!-- Settings Page -->
+  <data name="Settings_Title.Text" xml:space="preserve">
+    <value>Settings</value>
+  </data>
+  <data name="Settings_Description.Text" xml:space="preserve">
+    <value>Customize your WiFi Direct Cable experience</value>
+  </data>
+  
+  <!-- Language Section -->
+  <data name="Settings_Language_Title.Text" xml:space="preserve">
+    <value>Language</value>
+  </data>
+  <data name="Settings_Language_Description.Text" xml:space="preserve">
+    <value>Choose your preferred language for the application</value>
+  </data>
+  <data name="Settings_Language_ComboBox.Header" xml:space="preserve">
+    <value>Language</value>
+  </data>
+  <data name="Settings_Language_FollowSystem.Content" xml:space="preserve">
+    <value>Follow System</value>
+  </data>
+  <data name="Settings_Language_English.Content" xml:space="preserve">
+    <value>English</value>
+  </data>
+  <data name="Settings_Language_Chinese.Content" xml:space="preserve">
+    <value>中文 (Chinese)</value>
+  </data>
+  
+  <!-- Appearance Section -->
+  <data name="Settings_Appearance_Title.Text" xml:space="preserve">
+    <value>Appearance</value>
+  </data>
+  <data name="Settings_Appearance_Description.Text" xml:space="preserve">
+    <value>Customize the look and feel of the application</value>
+  </data>
+  <data name="Settings_Theme_ComboBox.Header" xml:space="preserve">
+    <value>Theme</value>
+  </data>
+  <data name="Settings_Theme_Default.Content" xml:space="preserve">
+    <value>Use system setting</value>
+  </data>
+  <data name="Settings_Theme_Light.Content" xml:space="preserve">
+    <value>Light</value>
+  </data>
+  <data name="Settings_Theme_Dark.Content" xml:space="preserve">
+    <value>Dark</value>
+  </data>
+  
+  <!-- About Section -->
+  <data name="Settings_About_Title.Text" xml:space="preserve">
+    <value>About</value>
+  </data>
+  
+  <!-- Language Change Dialog -->
+  <data name="Settings_Language_Changed_Title" xml:space="preserve">
+    <value>Language Changed</value>
+  </data>
+  <data name="Settings_Language_Changed_Content" xml:space="preserve">
+    <value>The language has been changed successfully.</value>
+  </data>
+  <data name="Settings_Language_Changed_OK" xml:space="preserve">
+    <value>OK</value>
+  </data>
+  <data name="Settings_About_Description.Text" xml:space="preserve">
+    <value>Information about WiFi Direct Cable</value>
+  </data>
+  <data name="Settings_About_AppName.Text" xml:space="preserve">
+    <value>WiFi Direct Cable</value>
+  </data>
+  <data name="Settings_About_Copyright.Text" xml:space="preserve">
+    <value>© 2025 WiFi Direct Cable. All rights reserved.</value>
+  </data>
+  <data name="Settings_About_Version.Text" xml:space="preserve">
+    <value>Version 1.0.0</value>
+  </data>
+  
+  <!-- GitHub Repository Section -->
+  <data name="Settings_GitHub_Title.Text" xml:space="preserve">
+    <value>Source Code</value>
+  </data>
+  <data name="Settings_GitHub_Description.Text" xml:space="preserve">
+    <value>View the source code repo.</value>
+  </data>
+  <data name="Settings_GitHub_Windows_Title.Text" xml:space="preserve">
+    <value>Windows Version</value>
+  </data>
+  <data name="Settings_GitHub_Windows_Description.Text" xml:space="preserve">
+    <value>WDCableWUI - Windows UWP application</value>
+  </data>
+  <data name="Settings_GitHub_Android_Title.Text" xml:space="preserve">
+    <value>Android Version</value>
+  </data>
+  <data name="Settings_GitHub_Android_Description.Text" xml:space="preserve">
+    <value>WDCable Flutter - Cross-platform mobile app</value>
+  </data>
+  
+  <!-- FileTransfer Page Additional -->
+  <data name="FileTransfer_Browse_Button.Content" xml:space="preserve">
+    <value>Browse</value>
+  </data>
+  <data name="FileTransfer_AutoReceive_Description.Text" xml:space="preserve">
+    <value>Files will be automatically received when the app is running.</value>
+  </data>
+  <data name="FileTransfer_Records_Title.Text" xml:space="preserve">
+    <value>Transfer Records</value>
+  </data>
+  <data name="FileTransfer_Filter_All.Content" xml:space="preserve">
+    <value>All</value>
+  </data>
+  <data name="FileTransfer_Filter_Sent.Content" xml:space="preserve">
+    <value>Sent</value>
+  </data>
+  <data name="FileTransfer_Filter_Received.Content" xml:space="preserve">
+    <value>Received</value>
+  </data>
+  
+  <!-- MainWindow Navigation -->
+  <data name="MainWindow_AppTitle.Text" xml:space="preserve">
+    <value>WiFi Direct Cable</value>
+  </data>
+  <data name="MainWindow_Navigation_Connection.Content" xml:space="preserve">
+    <value>Connection</value>
+  </data>
+  <data name="MainWindow_Navigation_Chat.Content" xml:space="preserve">
+    <value>Chat</value>
+  </data>
+  <data name="MainWindow_Navigation_SpeedTest.Content" xml:space="preserve">
+    <value>Speed Test</value>
+  </data>
+  <data name="MainWindow_Navigation_FileTransfer.Content" xml:space="preserve">
+    <value>File Transfer</value>
+  </data>
+  <data name="MainWindow_Navigation_Settings.Content" xml:space="preserve">
+    <value>Settings</value>
+  </data>
+  
+  <!-- Connection Page -->
+  <data name="Connection_Title.Text" xml:space="preserve">
+    <value>WiFi Direct Connection</value>
+  </data>
+  <data name="Connection_Description.Text" xml:space="preserve">
+    <value>Connect and share files with nearby devices using WiFi Direct</value>
+  </data>
+  <data name="Connection_DeviceVisibility_Title.Text" xml:space="preserve">
+    <value>Device Visibility</value>
+  </data>
+  <data name="Connection_DeviceVisibility_Description.Text" xml:space="preserve">
+    <value>Make this device discoverable by other WiFi Direct devices</value>
+  </data>
+  <data name="Connection_DeviceDiscovery_Title.Text" xml:space="preserve">
+    <value>Device Discovery</value>
+  </data>
+  <data name="Connection_DeviceDiscovery_Description.Text" xml:space="preserve">
+    <value>Scan for nearby WiFi Direct devices</value>
+  </data>
+  <data name="Connection_Status_Title.Text" xml:space="preserve">
+    <value>Connection Status</value>
+  </data>
+  <data name="Connection_Status_NotConnected.Text" xml:space="preserve">
+    <value>Not connected</value>
+  </data>
+  <data name="Connection_AvailableDevices_Title.Text" xml:space="preserve">
+    <value>Available Devices</value>
+  </data>
+  <data name="Connection_AvailableDevices_Description.Text" xml:space="preserve">
+    <value>Devices found during scan will appear here</value>
+  </data>
+  <data name="Connection_NoDevices_Title.Text" xml:space="preserve">
+    <value>No devices found</value>
+  </data>
+  <data name="Connection_NoDevices_Description.Text" xml:space="preserve">
+    <value>Start scanning to discover nearby devices</value>
+  </data>
+  
+  <!-- Chat Page -->
+  <data name="Chat_Title.Text" xml:space="preserve">
+    <value>Chat Communication</value>
+  </data>
+  <data name="Chat_Description.Text" xml:space="preserve">
+    <value>Send and receive messages with the connected device</value>
+  </data>
+  <data name="Chat_Status_Disconnected.Text" xml:space="preserve">
+    <value>Disconnected</value>
+  </data>
+  <data name="Chat_NoMessages_Title.Text" xml:space="preserve">
+    <value>No messages yet</value>
+  </data>
+  <data name="Chat_NoMessages_Description.Text" xml:space="preserve">
+    <value>Start a conversation by typing a message below</value>
+  </data>
+  <data name="Chat_ConnectionRequired_Title.Text" xml:space="preserve">
+    <value>WiFi Direct Connection Required</value>
+  </data>
+  <data name="Chat_ConnectionRequired_Description.Text" xml:space="preserve">
+    <value>Please establish a WiFi Direct connection to start chatting</value>
+  </data>
+  <data name="Chat_MessageInput.PlaceholderText" xml:space="preserve">
+    <value>Type a message...</value>
+  </data>
+  
+  <!-- Speed Test Page -->
+  <data name="SpeedTest_Title.Text" xml:space="preserve">
+    <value>Network Speed Test</value>
+  </data>
+  <data name="SpeedTest_Description.Text" xml:space="preserve">
+    <value>Test upload and download speeds with the connected device</value>
+  </data>
+  <data name="SpeedTest_NotConnected_Title.Text" xml:space="preserve">
+    <value>Not Connected</value>
+  </data>
+  <data name="SpeedTest_NotConnected_Description.Text" xml:space="preserve">
+    <value>Establish a connection to begin speed testing</value>
+  </data>
+  <data name="SpeedTest_Upload_Title.Text" xml:space="preserve">
+    <value>Upload Test</value>
+  </data>
+  <data name="SpeedTest_Download_Title.Text" xml:space="preserve">
+    <value>Download Test</value>
+  </data>
+  <data name="SpeedTest_Results_Title.Text" xml:space="preserve">
+    <value>Test Results</value>
+  </data>
+  <data name="SpeedTest_NoResults_Title.Text" xml:space="preserve">
+    <value>No test results yet</value>
+  </data>
+  <data name="SpeedTest_NoResults_Description.Text" xml:space="preserve">
+    <value>Run upload or download tests to see results here</value>
+  </data>
+  <data name="SpeedTest_Unit_Mbps.Text" xml:space="preserve">
+    <value>Mbps</value>
+  </data>
+  
+  <!-- File Transfer Page -->
+  <data name="FileTransfer_Title.Text" xml:space="preserve">
+    <value>File Transfer</value>
+  </data>
+  <data name="FileTransfer_Description.Text" xml:space="preserve">
+    <value>Send and receive files with the connected device</value>
+  </data>
+  <data name="FileTransfer_Send_Title.Text" xml:space="preserve">
+    <value>Send Files</value>
+  </data>
+  <data name="FileTransfer_DragDrop.Text" xml:space="preserve">
+    <value>Drag a file here or click to browse</value>
+  </data>
+  <data name="FileTransfer_SelectedFile.Text" xml:space="preserve">
+    <value>Selected File:</value>
+  </data>
+  <data name="FileTransfer_Receive_Title.Text" xml:space="preserve">
+    <value>Receive Settings</value>
+  </data>
+  <data name="FileTransfer_DownloadLocation.Text" xml:space="preserve">
+    <value>Download Location:</value>
+  </data>
+  <data name="FileTransfer_AutoReceive.Text" xml:space="preserve">
+    <value>Files will be automatically received when the app is running.</value>
+  </data>
+  <data name="FileTransfer_Records_Title.Text" xml:space="preserve">
+    <value>Transfer Records</value>
+  </data>
+  
+  <!-- MainWindow Page Title -->
+  <data name="MainWindow_PageTitle_Connection.Text" xml:space="preserve">
+    <value>Connection</value>
+  </data>
+  
+  <!-- MainWindow Status -->
+  <data name="MainWindow_Status_Ready.Text" xml:space="preserve">
+    <value>Ready</value>
+  </data>
+  <data name="MainWindow_Status_Disconnected.Text" xml:space="preserve">
+    <value>Disconnected</value>
+  </data>
+  <data name="MainWindow_Status_NoDevice.Text" xml:space="preserve">
+    <value>No device connected</value>
+  </data>
+  
+  <!-- Page Titles -->
+  <data name="MainWindow_PageTitle_Chat" xml:space="preserve">
+    <value>Chat</value>
+  </data>
+  <data name="MainWindow_PageTitle_SpeedTest" xml:space="preserve">
+    <value>Speed Test</value>
+  </data>
+  <data name="MainWindow_PageTitle_FileTransfer" xml:space="preserve">
+    <value>File Transfer</value>
+  </data>
+  <data name="MainWindow_PageTitle_Settings" xml:space="preserve">
+    <value>Settings</value>
+  </data>
+</root>

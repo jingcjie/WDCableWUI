@@ -31,7 +31,7 @@
             <!-- App Icon and Title -->
             <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,0,0">
                 <Image Source="Assets/Square44x44Logo.png" Width="16" Height="16" Margin="0,0,8,0"/>
-                <TextBlock Text="WiFi Direct Cable" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                <TextBlock x:Uid="MainWindow_AppTitle" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center"/>
             </StackPanel>
             
             <!-- Drag Region -->
@@ -50,7 +50,7 @@
                        SelectionChanged="NavigationView_SelectionChanged">
             
             <NavigationView.MenuItems>
-                <NavigationViewItem Content="Connection" Tag="Connection">
+                <NavigationViewItem x:Uid="MainWindow_Navigation_Connection" Tag="Connection">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE968;"/>
                     </NavigationViewItem.Icon>
@@ -59,7 +59,7 @@
                     </NavigationViewItem.InfoBadge>
                 </NavigationViewItem>
                 
-                <NavigationViewItem Content="Chat" Tag="Chat">
+                <NavigationViewItem x:Uid="MainWindow_Navigation_Chat" Tag="Chat">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE8BD;"/>
                     </NavigationViewItem.Icon>
@@ -68,7 +68,7 @@
                     </NavigationViewItem.InfoBadge>
                 </NavigationViewItem>
                 
-                <NavigationViewItem Content="Speed Test" Tag="SpeedTest">
+                <NavigationViewItem x:Uid="MainWindow_Navigation_SpeedTest" Tag="SpeedTest">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE9F9;"/>
                     </NavigationViewItem.Icon>
@@ -77,13 +77,19 @@
                     </NavigationViewItem.InfoBadge>
                 </NavigationViewItem>
                 
-                <NavigationViewItem Content="File Transfer" Tag="FileTransfer">
+                <NavigationViewItem x:Uid="MainWindow_Navigation_FileTransfer" Tag="FileTransfer">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE8B5;"/>
                     </NavigationViewItem.Icon>
                     <NavigationViewItem.InfoBadge>
                         <InfoBadge x:Name="FileTransferBadge" Visibility="Collapsed"/>
                     </NavigationViewItem.InfoBadge>
+                </NavigationViewItem>
+                
+                <NavigationViewItem x:Uid="MainWindow_Navigation_Settings" Tag="Settings">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE713;"/>
+                    </NavigationViewItem.Icon>
                 </NavigationViewItem>
             </NavigationView.MenuItems>
 
@@ -96,7 +102,7 @@
                     
                     <TextBlock x:Name="PageTitle" 
                               Grid.Column="0"
-                              Text="Connection"
+                              x:Uid="MainWindow_PageTitle_Connection"
                               Style="{StaticResource TitleTextBlockStyle}"
                               VerticalAlignment="Center"/>
                     
@@ -115,7 +121,7 @@
                                          FontSize="14"
                                          Foreground="{ThemeResource SystemFillColorCriticalBrush}"/>
                                 <TextBlock x:Name="ConnectionStatusText"
-                                          Text="Disconnected"
+                                          x:Uid="MainWindow_Status_Disconnected"
                                           FontSize="12"
                                           FontWeight="Medium"
                                           VerticalAlignment="Center"/>
@@ -144,14 +150,14 @@
 
                 <TextBlock x:Name="StatusMessage"
                           Grid.Column="0"
-                          Text="Ready"
+                          x:Uid="MainWindow_Status_Ready"
                           FontSize="12"
                           VerticalAlignment="Center"
                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
 
                 <TextBlock x:Name="DeviceInfo"
                           Grid.Column="1"
-                          Text="No device connected"
+                          x:Uid="MainWindow_Status_NoDevice"
                           FontSize="12"
                           VerticalAlignment="Center"
                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>

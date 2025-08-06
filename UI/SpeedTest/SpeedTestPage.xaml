@@ -42,12 +42,13 @@
 
             <!-- Header -->
             <StackPanel Grid.Row="0" Spacing="8" Margin="0,0,0,24">
-                <TextBlock Text="Network Speed Test"
-                          Style="{StaticResource SubtitleTextBlockStyle}"
-                          Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
-                <TextBlock Text="Test upload and download speeds with the connected device"
-                          Style="{StaticResource CaptionTextBlockStyle}"
-                          Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                <TextBlock x:Uid="SpeedTest_Title"
+                      Style="{StaticResource SubtitleTextBlockStyle}"
+                      Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+            
+            <TextBlock x:Uid="SpeedTest_Description"
+                      Style="{StaticResource CaptionTextBlockStyle}"
+                      Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
             </StackPanel>
 
             <!-- Main Content -->
@@ -77,17 +78,17 @@
                         
                         <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
                             <TextBlock x:Name="ConnectionStatusText"
-                                      Text="Not Connected"
+                                      x:Uid="SpeedTest_Status_NotConnected"
                                       Style="{StaticResource BodyStrongTextBlockStyle}"/>
                             <TextBlock x:Name="ConnectionDetailsText"
-                                      Text="Establish a connection to begin speed testing"
+                                      x:Uid="SpeedTest_Status_Description"
                                       Style="{StaticResource CaptionTextBlockStyle}"
                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                         </StackPanel>
                         
                         <Button x:Name="RefreshConnectionButton"
                                Grid.Column="2"
-                               Content="Refresh"
+                               x:Uid="SpeedTest_RefreshButton"
                                Style="{StaticResource AccentButtonStyle}"
                                Click="RefreshConnectionButton_Click"/>
                     </Grid>
@@ -118,7 +119,7 @@
                                          VerticalAlignment="Center"/>
                                 
                                 <TextBlock Grid.Column="1"
-                                          Text="Upload Test"
+                                          x:Uid="SpeedTest_Upload_Title"
                                           Style="{StaticResource BodyStrongTextBlockStyle}"
                                           Margin="12,0,0,0"
                                           VerticalAlignment="Center"/>
@@ -128,7 +129,7 @@
                                       Text="0.00"
                                       Style="{StaticResource SpeedDisplayStyle}"/>
                             
-                            <TextBlock Text="Mbps"
+                            <TextBlock x:Uid="SpeedTest_Unit_Mbps"
                                       Style="{StaticResource CaptionTextBlockStyle}"
                                       HorizontalAlignment="Center"
                                       Margin="0,-8,0,0"/>
@@ -141,7 +142,7 @@
                                         Visibility="Collapsed"/>
                             
                             <ComboBox x:Name="UploadSizeComboBox"
-                                     Header="Test Size"
+                                     x:Uid="SpeedTest_TestSize_Header"
                                      SelectedIndex="1"
                                      HorizontalAlignment="Stretch">
                                 <ComboBoxItem Content="1 MB" Tag="1048576"/>
@@ -151,7 +152,7 @@
                             </ComboBox>
                             
                             <Button x:Name="StartUploadButton"
-                                   Content="Start Upload Test"
+                                   x:Uid="SpeedTest_StartUpload_Button"
                                    Style="{StaticResource TestButtonStyle}"
                                    HorizontalAlignment="Stretch"
                                    Click="StartUploadButton_Click"/>
@@ -175,7 +176,7 @@
                                          VerticalAlignment="Center"/>
                                 
                                 <TextBlock Grid.Column="1"
-                                          Text="Download Test"
+                                          x:Uid="SpeedTest_Download_Title"
                                           Style="{StaticResource BodyStrongTextBlockStyle}"
                                           Margin="12,0,0,0"
                                           VerticalAlignment="Center"/>
@@ -185,7 +186,7 @@
                                       Text="0.00"
                                       Style="{StaticResource SpeedDisplayStyle}"/>
                             
-                            <TextBlock Text="Mbps"
+                            <TextBlock x:Uid="SpeedTest_Unit_Mbps"
                                       Style="{StaticResource CaptionTextBlockStyle}"
                                       HorizontalAlignment="Center"
                                       Margin="0,-8,0,0"/>
@@ -198,7 +199,7 @@
                                         Visibility="Collapsed"/>
                             
                             <ComboBox x:Name="DownloadSizeComboBox"
-                                     Header="Test Size"
+                                     x:Uid="SpeedTest_TestSize_Header"
                                      SelectedIndex="1"
                                      HorizontalAlignment="Stretch">
                                 <ComboBoxItem Content="1 MB" Tag="1048576"/>
@@ -208,7 +209,7 @@
                             </ComboBox>
                             
                             <Button x:Name="StartDownloadButton"
-                                   Content="Start Download Test"
+                                   x:Uid="SpeedTest_StartDownload_Button"
                                    Style="{StaticResource TestButtonStyle}"
                                    HorizontalAlignment="Stretch"
                                    Click="StartDownloadButton_Click"/>
@@ -232,12 +233,12 @@
                             </Grid.ColumnDefinitions>
                             
                             <TextBlock Grid.Column="0"
-                                      Text="Test Results"
+                                      x:Uid="SpeedTest_Results_Title"
                                       Style="{StaticResource BodyStrongTextBlockStyle}"/>
                             
                             <Button Grid.Column="1"
                                    x:Name="ClearHistoryButton"
-                                   Content="Clear History"
+                                   x:Uid="SpeedTest_ClearHistory_Button"
                                    Style="{StaticResource DefaultButtonStyle}"
                                    Click="ClearHistoryButton_Click"/>
                         </Grid>

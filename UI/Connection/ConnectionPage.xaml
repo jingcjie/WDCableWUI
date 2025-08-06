@@ -21,10 +21,10 @@
 
             <!-- Header -->
             <StackPanel Grid.Row="0" Spacing="8" Margin="0,0,0,24">
-                <TextBlock Text="WiFi Direct Connection"
+                <TextBlock x:Uid="Connection_Title"
                           Style="{StaticResource SubtitleTextBlockStyle}"
                           Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
-                <TextBlock Text="Connect and share files with nearby devices using WiFi Direct"
+                <TextBlock x:Uid="Connection_Description"
                           Style="{StaticResource CaptionTextBlockStyle}"
                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
             </StackPanel>
@@ -53,11 +53,11 @@
                                          Glyph="&#xE8B8;"
                                          FontSize="20"
                                          Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
-                                <TextBlock Text="Device Visibility"
+                                <TextBlock x:Uid="Connection_DeviceVisibility_Title"
                                           Style="{StaticResource BodyStrongTextBlockStyle}"/>
                             </StackPanel>
                             
-                            <TextBlock Text="Make this device discoverable by other WiFi Direct devices"
+                            <TextBlock x:Uid="Connection_DeviceVisibility_Description"
                                       Style="{StaticResource CaptionTextBlockStyle}"
                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                       TextWrapping="Wrap"/>
@@ -78,11 +78,11 @@
                                          Glyph="&#xE1A3;"
                                          FontSize="20"
                                          Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
-                                <TextBlock Text="Device Discovery"
+                                <TextBlock x:Uid="Connection_DeviceDiscovery_Title"
                                           Style="{StaticResource BodyStrongTextBlockStyle}"/>
                             </StackPanel>
                             
-                            <TextBlock Text="Scan for nearby WiFi Direct devices"
+                            <TextBlock x:Uid="Connection_DeviceDiscovery_Description"
                                       Style="{StaticResource CaptionTextBlockStyle}"
                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                             
@@ -107,7 +107,7 @@
                                          Glyph="&#xE968;"
                                          FontSize="20"
                                          Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
-                                <TextBlock Text="Connection Status"
+                                <TextBlock x:Uid="Connection_Status_Title"
                                           Style="{StaticResource BodyStrongTextBlockStyle}"/>
                             </StackPanel>
                             
@@ -118,7 +118,7 @@
                                    Padding="12">
                                 <StackPanel Spacing="8">
                                     <TextBlock x:Name="ConnectionStatusText"
-                                              Text="Not connected"
+                                              x:Uid="Connection_Status_NotConnected"
                                               Style="{StaticResource BodyTextBlockStyle}"/>
                                     <TextBlock x:Name="DeviceRoleText"
                                               Text=""
@@ -149,11 +149,11 @@
                                      Glyph="&#xE8EA;"
                                      FontSize="20"
                                      Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
-                            <TextBlock Text="Available Devices"
+                            <TextBlock x:Uid="Connection_AvailableDevices_Title"
                                       Style="{StaticResource BodyStrongTextBlockStyle}"/>
                         </StackPanel>
                         
-                        <TextBlock Text="Devices found during scan will appear here"
+                        <TextBlock x:Uid="Connection_AvailableDevices_Description"
                                   Style="{StaticResource CaptionTextBlockStyle}"
                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                         
@@ -224,11 +224,11 @@
                                      FontSize="32"
                                      Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                      HorizontalAlignment="Center"/>
-                            <TextBlock Text="No devices found"
+                            <TextBlock x:Uid="Connection_NoDevices_Title"
                                       Style="{StaticResource BodyTextBlockStyle}"
                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                       HorizontalAlignment="Center"/>
-                            <TextBlock Text="Start scanning to discover nearby devices"
+                            <TextBlock x:Uid="Connection_NoDevices_Description"
                                       Style="{StaticResource CaptionTextBlockStyle}"
                                       Foreground="{ThemeResource TextFillColorTertiaryBrush}"
                                       HorizontalAlignment="Center"/>
