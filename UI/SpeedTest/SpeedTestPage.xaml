@@ -305,11 +305,11 @@
                                      Glyph="&#xE9F9;"
                                      FontSize="32"
                                      Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-                            <TextBlock Text="No test results yet"
+                            <TextBlock x:Uid="SpeedTest_NoResults_Title"
                                       Style="{StaticResource BodyTextBlockStyle}"
                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                       HorizontalAlignment="Center"/>
-                            <TextBlock Text="Run upload or download tests to see results here"
+                            <TextBlock x:Uid="SpeedTest_NoResults_Description"
                                       Style="{StaticResource CaptionTextBlockStyle}"
                                       Foreground="{ThemeResource TextFillColorTertiaryBrush}"
                                       HorizontalAlignment="Center"/>

@@ -9,6 +9,7 @@ namespace WDCableWUI.Services
     /// </summary>
     public static class ServiceManager
     {
+        private static DataManager? _dataManager;
         private static WiFiDirectService? _wifiDirectService;
         private static ConnectionService? _connectionService;
         private static ChatService? _chatService;
@@ -16,6 +17,21 @@ namespace WDCableWUI.Services
         private static FileTransferService? _fileTransferService;
         private static readonly object _lock = new object();
         private static bool _isInitialized = false;
+        
+        /// <summary>
+        /// Gets the singleton DataManager instance.
+        /// </summary>
+        public static DataManager? DataManager
+        {
+            get
+            {
+                if (!_isInitialized)
+                {
+                    throw new InvalidOperationException("ServiceManager must be initialized before accessing services. Call Initialize() first.");
+                }
+                return _dataManager;
+            }
+        }
         
         /// <summary>
         /// Gets the singleton WiFiDirectService instance.
@@ -112,6 +128,9 @@ namespace WDCableWUI.Services
                 
                 try
                 {
+                    // Initialize DataManager first as it's needed by other services
+                    _dataManager = DataManager.Instance;
+                    
                     _wifiDirectService = new WiFiDirectService();
                     _connectionService = ConnectionService.Instance;
                     
@@ -204,6 +223,11 @@ namespace WDCableWUI.Services
                     // Then dispose WiFiDirectService
                     _wifiDirectService?.Dispose();
                     _wifiDirectService = null;
+                    
+                    // Finally dispose DataManager
+                    _dataManager = null;
+                    DataManager.ResetInstance();
+                    
                     _isInitialized = false;
                 }
                 catch (Exception ex)

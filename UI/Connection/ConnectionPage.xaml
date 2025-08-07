@@ -63,9 +63,7 @@
                                       TextWrapping="Wrap"/>
                             
                             <ToggleSwitch x:Name="DiscoverableToggle"
-                                         Header="Accept Invitation"
-                                         OnContent="Accept"
-                                         OffContent="Reject"
+                                         x:Uid="Connection_AcceptInvitation"
                                          Toggled="OnDiscoverableToggled"/>
                         </StackPanel>
 
@@ -88,11 +86,11 @@
                             
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <Button x:Name="ScanButton"
-                                       Content="Start Scan"
+                                       x:Uid="Connection_ScanButton"
                                        Style="{StaticResource AccentButtonStyle}"
                                        Click="OnScanButtonClick"/>
                                 <Button x:Name="StopScanButton"
-                                       Content="Stop Scan"
+                                       x:Uid="Connection_StopScanButton"
                                        IsEnabled="False"
                                        Click="OnStopScanButtonClick"/>
                             </StackPanel>
@@ -128,7 +126,7 @@
                             </Border>
                             
                             <Button x:Name="DisconnectButton"
-                                   Content="Disconnect"
+                                   x:Uid="Connection_DisconnectButton"
                                    IsEnabled="False"
                                    Click="OnDisconnectButtonClick"/>
                         </StackPanel>
@@ -192,14 +190,14 @@
                                                 </StackPanel>
                                                 
                                                 <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8">
-                                                    <Button Content="Connect"
+                                                    <Button x:Uid="Connection_ConnectButton"
                                                            Style="{StaticResource AccentButtonStyle}"
                                                            FontSize="12"
                                                            Padding="8,4"
                                                            Click="OnConnectButtonClick"
                                                            Tag="{Binding}"
                                                            Visibility="{Binding IsConnected, Converter={StaticResource BoolToVisibilityConverter}, ConverterParameter=Inverse}"/>
-                                                    <Button Content="Disconnect"
+                                                    <Button x:Uid="Connection_DisconnectButton"
                                                            FontSize="12"
                                                            Padding="8,4"
                                                            Click="OnDisconnectDeviceButtonClick"

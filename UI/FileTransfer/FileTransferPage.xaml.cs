@@ -76,12 +76,12 @@ namespace WDCableWUI.UI.FileTransfer
 
         private void InitializeDefaultSettings()
         {
-            // Set default download location to user's Downloads folder
-            var downloadsPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
-            DownloadLocationTextBox.Text = downloadsPath;
+            // Load saved download path from DataManager
+            var savedDownloadPath = DataManager.Instance.GetDownloadPath();
+            DownloadLocationTextBox.Text = savedDownloadPath;
             
-            // Update the service with the default path
-            UpdateServiceDownloadPath(downloadsPath);
+            // Update the service with the saved path
+            UpdateServiceDownloadPath(savedDownloadPath);
         }
         
         private void InitializeFileTransferService()
@@ -299,6 +299,8 @@ namespace WDCableWUI.UI.FileTransfer
             {
                 DownloadLocationTextBox.Text = folder.Path;
                 UpdateServiceDownloadPath(folder.Path);
+                // Save the path to DataManager for persistence
+                DataManager.Instance.SetDownloadPath(folder.Path);
             }
         }
         
@@ -306,10 +308,12 @@ namespace WDCableWUI.UI.FileTransfer
         {
             if (sender is TextBox textBox && !string.IsNullOrWhiteSpace(textBox.Text))
             {
-                // Validate that the path exists before updating the service
+                // Validate that the path exists before updating the service and saving
                 if (Directory.Exists(textBox.Text))
                 {
                     UpdateServiceDownloadPath(textBox.Text);
+                    // Save the path to DataManager for persistence
+                    DataManager.Instance.SetDownloadPath(textBox.Text);
                 }
             }
         }

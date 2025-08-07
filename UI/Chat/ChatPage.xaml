@@ -89,6 +89,17 @@
                 </StackPanel>
                 
                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <Button x:Name="ClearHistoryButton"
+                           x:Uid="Chat_ClearHistory"
+                           Style="{StaticResource DefaultButtonStyle}"
+                           Click="ClearHistoryButton_Click">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <FontIcon FontFamily="{StaticResource SymbolThemeFontFamily}"
+                                     Glyph="&#xE74D;"
+                                     FontSize="14"/>
+                            <TextBlock x:Uid="Chat_ClearHistory_Text"/>
+                        </StackPanel>
+                    </Button>
                     <TextBlock x:Name="ConnectionStatusText"
                               x:Uid="Chat_Status_Disconnected"
                               Style="{StaticResource CaptionTextBlockStyle}"

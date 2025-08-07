@@ -349,4 +349,74 @@
   <data name="MainWindow_PageTitle_Settings" xml:space="preserve">
     <value>设置</value>
   </data>
+  
+  <!-- Missing FileTransfer strings -->
+  <data name="FileTransfer_DragDrop_Description.Text" xml:space="preserve">
+    <value>将文件拖拽到此处或点击浏览</value>
+  </data>
+  <data name="FileTransfer_Send_Button.Content" xml:space="preserve">
+    <value>发送</value>
+  </data>
+  <data name="FileTransfer_DownloadLocation_Label.Text" xml:space="preserve">
+    <value>下载位置：</value>
+  </data>
+  
+  <!-- Missing SpeedTest strings -->
+  <data name="SpeedTest_Status_NotConnected.Text" xml:space="preserve">
+    <value>未连接</value>
+  </data>
+  <data name="SpeedTest_Status_Description.Text" xml:space="preserve">
+    <value>建立连接以开始速度测试</value>
+  </data>
+  <data name="SpeedTest_RefreshButton.Content" xml:space="preserve">
+    <value>刷新</value>
+  </data>
+  <data name="SpeedTest_TestSize_Header" xml:space="preserve">
+    <value>测试大小</value>
+  </data>
+  <data name="SpeedTest_StartUpload_Button.Content" xml:space="preserve">
+    <value>开始上传测试</value>
+  </data>
+  <data name="SpeedTest_StartDownload_Button.Content" xml:space="preserve">
+    <value>开始下载测试</value>
+  </data>
+  <data name="SpeedTest_ClearHistory_Button.Content" xml:space="preserve">
+    <value>清除历史</value>
+  </data>
+  
+  <!-- Missing Chat strings -->
+  <data name="Chat_ClearHistory.Content" xml:space="preserve">
+    <value>清除历史</value>
+  </data>
+  <data name="Chat_ClearHistory_Text.Text" xml:space="preserve">
+    <value>清除所有聊天消息</value>
+  </data>
+  
+  <!-- Missing Connection strings -->
+  <data name="Connection_ScanButton.Content" xml:space="preserve">
+    <value>开始扫描</value>
+  </data>
+  <data name="Connection_StopScanButton.Content" xml:space="preserve">
+    <value>停止扫描</value>
+  </data>
+  <data name="Connection_ConnectButton.Content" xml:space="preserve">
+    <value>连接</value>
+  </data>
+  <data name="Connection_DisconnectButton.Content" xml:space="preserve">
+    <value>断开连接</value>
+  </data>
+  <data name="Connection_AcceptInvitation.Header" xml:space="preserve">
+    <value>接受邀请</value>
+  </data>
+  <data name="Connection_AcceptInvitation.OnContent" xml:space="preserve">
+    <value>接受</value>
+  </data>
+  <data name="Connection_AcceptInvitation.OffContent" xml:space="preserve">
+    <value>拒绝</value>
+  </data>
+  
+  <!-- Missing FileTransfer strings -->
+  <data name="FileTransfer_ClearAllRecords.Content" xml:space="preserve">
+    <value>清除所有记录</value>
+  </data>
 </root>

@@ -20,6 +20,7 @@ namespace WDCableWUI.UI.SpeedTest
         private bool _isDownloadTestRunning;
         private SpeedTestService? _speedTestService;
         private ConnectionService? _connectionService;
+        private readonly DataManager _dataManager;
 
         public event PropertyChangedEventHandler PropertyChanged;
 
@@ -29,6 +30,7 @@ namespace WDCableWUI.UI.SpeedTest
             _testResults = new ObservableCollection<SpeedTestResultViewModel>();
             _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
             TestResultsListView.ItemsSource = _testResults;
+            _dataManager = DataManager.Instance;
             
             // Initialize services with null checks
             try
@@ -60,6 +62,9 @@ namespace WDCableWUI.UI.SpeedTest
             
             UpdateConnectionStatus();
             UpdateTestButtonStates();
+            
+            // Load speed test records on initialization
+            LoadSpeedTestRecords();
         }
 
         protected override void OnNavigatedTo(NavigationEventArgs e)
@@ -71,6 +76,9 @@ namespace WDCableWUI.UI.SpeedTest
         protected override void OnNavigatedFrom(NavigationEventArgs e)
         {
             base.OnNavigatedFrom(e);
+            
+            // Save speed test records when navigating away
+            SaveSpeedTestRecords();
         }
 
         private void OnPropertyChanged(string propertyName)
@@ -126,6 +134,9 @@ namespace WDCableWUI.UI.SpeedTest
                 
                 UpdateTestButtonStates();
                 UpdateEmptyState();
+                
+                // Auto-save speed test records after adding new result
+                SaveSpeedTestRecords();
             });
         }
 
@@ -333,6 +344,68 @@ namespace WDCableWUI.UI.SpeedTest
                 UploadSpeedText.Text = "0.00";
                 DownloadSpeedText.Text = "0.00";
                 UpdateEmptyState();
+                
+                // Clear persistent storage as well
+                _dataManager.ClearSpeedTestRecords();
+            }
+        }
+        
+        /// <summary>
+        /// Saves the current speed test records to persistent storage.
+        /// </summary>
+        private void SaveSpeedTestRecords()
+        {
+            try
+            {
+                var recordData = _testResults.Select(vm => new SpeedTestRecordData
+                {
+                    TestType = (int)vm.Result.TestType,
+                    DataSize = vm.Result.DataSize,
+                    DurationMs = vm.Result.Duration.TotalMilliseconds,
+                    SpeedMbps = vm.Result.SpeedMbps,
+                    Success = vm.Result.Success,
+                    ErrorMessage = vm.Result.ErrorMessage,
+                    Timestamp = DateTime.Now // Use current time as we don't store original timestamp
+                }).ToList();
+                
+                _dataManager.SaveSpeedTestRecords(recordData);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Failed to save speed test records: {ex.Message}");
+            }
+        }
+        
+        /// <summary>
+        /// Loads speed test records from persistent storage and displays them.
+        /// </summary>
+        private void LoadSpeedTestRecords()
+        {
+            try
+            {
+                var recordData = _dataManager.LoadSpeedTestRecords();
+                
+                foreach (var data in recordData)
+                {
+                    var result = new SpeedTestResult
+                    {
+                        TestType = (SpeedTestType)data.TestType,
+                        DataSize = data.DataSize,
+                        Duration = TimeSpan.FromMilliseconds(data.DurationMs),
+                        SpeedMbps = data.SpeedMbps,
+                        Success = data.Success,
+                        ErrorMessage = data.ErrorMessage
+                    };
+                    
+                    var resultViewModel = new SpeedTestResultViewModel(result, data.Timestamp);
+                    _testResults.Add(resultViewModel);
+                }
+                
+                UpdateEmptyState();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Failed to load speed test records: {ex.Message}");
             }
         }
     }
@@ -341,15 +414,17 @@ namespace WDCableWUI.UI.SpeedTest
     public class SpeedTestResultViewModel
     {
         public SpeedTestResult Result { get; }
+        public DateTime TestTimestamp { get; }
 
-        public SpeedTestResultViewModel(SpeedTestResult result)
+        public SpeedTestResultViewModel(SpeedTestResult result, DateTime? timestamp = null)
         {
             Result = result;
+            TestTimestamp = timestamp ?? DateTime.Now;
         }
 
         public string TestTypeIcon => Result.TestType == SpeedTestType.Upload ? "\uE898" : "\uE896";
         public string TestTypeName => Result.TestType == SpeedTestType.Upload ? "Upload" : "Download";
-        public string Timestamp => DateTime.Now.ToString("HH:mm:ss");
+        public string Timestamp => TestTimestamp.ToString("HH:mm:ss");
         public string DataSizeFormatted => FormatBytes(Result.DataSize);
         public string DurationFormatted => $"{Result.Duration.TotalMilliseconds:F0}ms";
         public string SpeedFormatted => $"{Result.SpeedMbps:F2} Mbps";

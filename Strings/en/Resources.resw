@@ -349,4 +349,74 @@
   <data name="MainWindow_PageTitle_Settings" xml:space="preserve">
     <value>Settings</value>
   </data>
+  
+  <!-- Missing FileTransfer strings -->
+  <data name="FileTransfer_DragDrop_Description.Text" xml:space="preserve">
+    <value>Drag a file here or click to browse</value>
+  </data>
+  <data name="FileTransfer_Send_Button.Content" xml:space="preserve">
+    <value>Send</value>
+  </data>
+  <data name="FileTransfer_DownloadLocation_Label.Text" xml:space="preserve">
+    <value>Download Location:</value>
+  </data>
+  
+  <!-- Missing SpeedTest strings -->
+  <data name="SpeedTest_Status_NotConnected.Text" xml:space="preserve">
+    <value>Not Connected</value>
+  </data>
+  <data name="SpeedTest_Status_Description.Text" xml:space="preserve">
+    <value>Establish a connection to begin speed testing</value>
+  </data>
+  <data name="SpeedTest_RefreshButton.Content" xml:space="preserve">
+    <value>Refresh</value>
+  </data>
+  <data name="SpeedTest_TestSize_Header" xml:space="preserve">
+    <value>Test Size</value>
+  </data>
+  <data name="SpeedTest_StartUpload_Button.Content" xml:space="preserve">
+    <value>Start Upload Test</value>
+  </data>
+  <data name="SpeedTest_StartDownload_Button.Content" xml:space="preserve">
+    <value>Start Download Test</value>
+  </data>
+  <data name="SpeedTest_ClearHistory_Button.Content" xml:space="preserve">
+    <value>Clear History</value>
+  </data>
+  
+  <!-- Missing Chat strings -->
+  <data name="Chat_ClearHistory.Content" xml:space="preserve">
+    <value>Clear History</value>
+  </data>
+  <data name="Chat_ClearHistory_Text.Text" xml:space="preserve">
+    <value>Clear all chat messages</value>
+  </data>
+  
+  <!-- Missing Connection strings -->
+  <data name="Connection_ScanButton.Content" xml:space="preserve">
+    <value>Start Scan</value>
+  </data>
+  <data name="Connection_StopScanButton.Content" xml:space="preserve">
+    <value>Stop Scan</value>
+  </data>
+  <data name="Connection_ConnectButton.Content" xml:space="preserve">
+    <value>Connect</value>
+  </data>
+  <data name="Connection_DisconnectButton.Content" xml:space="preserve">
+    <value>Disconnect</value>
+  </data>
+  <data name="Connection_AcceptInvitation.Header" xml:space="preserve">
+    <value>Accept Invitation</value>
+  </data>
+  <data name="Connection_AcceptInvitation.OnContent" xml:space="preserve">
+    <value>Accept</value>
+  </data>
+  <data name="Connection_AcceptInvitation.OffContent" xml:space="preserve">
+    <value>Reject</value>
+  </data>
+  
+  <!-- Missing FileTransfer strings -->
+  <data name="FileTransfer_ClearAllRecords.Content" xml:space="preserve">
+    <value>Clear All Records</value>
+  </data>
 </root>

@@ -6,21 +6,35 @@ using System.Globalization;
 using Windows.Globalization;
 using Windows.Storage;
 using Windows.System;
+using WDCableWUI.Services;
 
 namespace WDCableWUI.UI.Settings
 {
     public sealed partial class SettingsPage : Page
     {
-        private readonly ApplicationDataContainer _localSettings;
+        private DataManager? _dataManager;
         private bool _isInitializing = true;
 
         public SettingsPage()
         {
             this.InitializeComponent();
-            _localSettings = ApplicationData.Current.LocalSettings;
+            InitializeDataManager();
             
             LoadSettings();
             _isInitializing = false;
+        }
+        
+        private void InitializeDataManager()
+        {
+            try
+            {
+                _dataManager = ServiceManager.IsInitialized ? ServiceManager.DataManager : null;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"DataManager not available: {ex.Message}");
+                _dataManager = null;
+            }
         }
 
         protected override void OnNavigatedTo(NavigationEventArgs e)
@@ -31,12 +45,25 @@ namespace WDCableWUI.UI.Settings
 
         private void LoadSettings()
         {
-            // Load language setting
-            var savedLanguage = _localSettings.Values["AppLanguage"] as string ?? "system";
+            string savedLanguage;
+            string savedTheme;
+            
+            if (_dataManager == null)
+            {
+                // Fallback to direct access if DataManager is not available
+                var localSettings = ApplicationData.Current.LocalSettings;
+                savedLanguage = localSettings.Values["AppLanguage"] as string ?? "system";
+                savedTheme = localSettings.Values["AppTheme"] as string ?? "default";
+            }
+            else
+            {
+                // Load language setting
+                savedLanguage = _dataManager.GetAppLanguage();
+                // Load theme setting
+                savedTheme = _dataManager.GetAppTheme();
+            }
+            
             SelectLanguageItem(savedLanguage);
-
-            // Load theme setting
-            var savedTheme = _localSettings.Values["AppTheme"] as string ?? "default";
             SelectThemeItem(savedTheme);
             
             // Apply the current theme to ensure it's active
@@ -92,7 +119,16 @@ namespace WDCableWUI.UI.Settings
                 if (languageTag != null)
                 {
                     // Save the language preference
-                    _localSettings.Values["AppLanguage"] = languageTag;
+                    if (_dataManager != null)
+                    {
+                        _dataManager.SetAppLanguage(languageTag);
+                    }
+                    else
+                    {
+                        // Fallback to direct access
+                        var localSettings = ApplicationData.Current.LocalSettings;
+                        localSettings.Values["AppLanguage"] = languageTag;
+                    }
 
                     // Apply the language change
                     await ApplyLanguageAsync(languageTag);
@@ -111,7 +147,16 @@ namespace WDCableWUI.UI.Settings
                 if (themeTag != null)
                 {
                     // Save the theme preference
-                    _localSettings.Values["AppTheme"] = themeTag;
+                    if (_dataManager != null)
+                    {
+                        _dataManager.SetAppTheme(themeTag);
+                    }
+                    else
+                    {
+                        // Fallback to direct access
+                        var localSettings = ApplicationData.Current.LocalSettings;
+                        localSettings.Values["AppTheme"] = themeTag;
+                    }
 
                     // Apply the theme change
                     ApplyTheme(themeTag);
@@ -125,7 +170,8 @@ namespace WDCableWUI.UI.Settings
             {
                 // Debug: Verify the language is saved
                 System.Diagnostics.Debug.WriteLine($"Applying language: {languageTag}");
-                System.Diagnostics.Debug.WriteLine($"Saved language in settings: {_localSettings.Values["AppLanguage"]}");
+                var savedLanguage = _dataManager?.GetAppLanguage() ?? "unknown";
+                System.Diagnostics.Debug.WriteLine($"Saved language in settings: {savedLanguage}");
                 
                 // Show restart dialog for language change
                 var dialog = new ContentDialog()

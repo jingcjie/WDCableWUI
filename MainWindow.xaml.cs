@@ -18,6 +18,7 @@ using WDCableWUI.UI.Chat;
 using WDCableWUI.UI.SpeedTest;
 using WDCableWUI.UI.FileTransfer;
 using WDCableWUI.UI.Settings;
+using WDCableWUI.Services;
 using Microsoft.UI.Windowing;
 using Microsoft.UI;
 using WinRT.Interop;
@@ -53,6 +54,8 @@ namespace WDCableWUI
                 { "FileTransfer", typeof(FileTransferPage) },
                 { "Settings", typeof(SettingsPage) }
             };
+            
+
             
             // Set default page
             MainNavigationView.SelectedItem = MainNavigationView.MenuItems[0];
@@ -106,6 +109,8 @@ namespace WDCableWUI
         {
             if (_pageTypes.TryGetValue(pageTag, out Type? pageType))
             {
+                // Use proper Frame navigation to ensure OnNavigatedTo/OnNavigatedFrom events are triggered
+                // This will allow pages to update their connection status when navigated to
                 ContentFrame.Navigate(pageType);
             }
         }
@@ -236,8 +241,28 @@ namespace WDCableWUI
         {
             try
             {
-                var localSettings = Windows.Storage.ApplicationData.Current.LocalSettings;
-                var savedTheme = localSettings.Values["AppTheme"] as string ?? "default";
+                string savedTheme = "default";
+                
+                // Try to get theme from DataManager first
+                try
+                {
+                    if (ServiceManager.IsInitialized && ServiceManager.DataManager != null)
+                    {
+                        savedTheme = ServiceManager.DataManager.GetAppTheme();
+                    }
+                    else
+                    {
+                        // Fallback to direct access if DataManager is not available
+                        var localSettings = Windows.Storage.ApplicationData.Current.LocalSettings;
+                        savedTheme = localSettings.Values["AppTheme"] as string ?? "default";
+                    }
+                }
+                catch
+                {
+                    // Fallback to direct access
+                    var localSettings = Windows.Storage.ApplicationData.Current.LocalSettings;
+                    savedTheme = localSettings.Values["AppTheme"] as string ?? "default";
+                }
                 
                 if (this.Content is FrameworkElement rootElement)
                 {
@@ -258,7 +283,7 @@ namespace WDCableWUI
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Failed to apply saved theme: {ex.Message}");
+                Debug.WriteLine($"Failed to apply saved theme: {ex.Message}");
             }
         }
     }

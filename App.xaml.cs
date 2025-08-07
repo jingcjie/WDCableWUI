@@ -76,8 +76,29 @@ namespace WDCableWUI
         {
             try
             {
-                var localSettings = ApplicationData.Current.LocalSettings;
-                var savedLanguage = localSettings.Values["AppLanguage"] as string;
+                string savedLanguage = null;
+                
+                // Try to get language from DataManager first, but since this runs early,
+                // we need to fallback to direct access
+                try
+                {
+                    if (ServiceManager.IsInitialized && ServiceManager.DataManager != null)
+                    {
+                        savedLanguage = ServiceManager.DataManager.GetAppLanguage();
+                    }
+                    else
+                    {
+                        // Fallback to direct access since ServiceManager may not be initialized yet
+                        var localSettings = ApplicationData.Current.LocalSettings;
+                        savedLanguage = localSettings.Values["AppLanguage"] as string;
+                    }
+                }
+                catch
+                {
+                    // Fallback to direct access
+                    var localSettings = ApplicationData.Current.LocalSettings;
+                    savedLanguage = localSettings.Values["AppLanguage"] as string;
+                }
                 
                 System.Diagnostics.Debug.WriteLine($"Initializing localization with saved language: {savedLanguage}");
                 
@@ -103,8 +124,29 @@ namespace WDCableWUI
         {
             try
             {
-                var localSettings = ApplicationData.Current.LocalSettings;
-                var savedTheme = localSettings.Values["AppTheme"] as string;
+                string savedTheme = null;
+                
+                // Try to get theme from DataManager first, but since this runs early,
+                // we need to fallback to direct access
+                try
+                {
+                    if (ServiceManager.IsInitialized && ServiceManager.DataManager != null)
+                    {
+                        savedTheme = ServiceManager.DataManager.GetAppTheme();
+                    }
+                    else
+                    {
+                        // Fallback to direct access since ServiceManager may not be initialized yet
+                        var localSettings = ApplicationData.Current.LocalSettings;
+                        savedTheme = localSettings.Values["AppTheme"] as string;
+                    }
+                }
+                catch
+                {
+                    // Fallback to direct access
+                    var localSettings = ApplicationData.Current.LocalSettings;
+                    savedTheme = localSettings.Values["AppTheme"] as string;
+                }
                 
                 if (!string.IsNullOrEmpty(savedTheme) && savedTheme != "default")
                 {

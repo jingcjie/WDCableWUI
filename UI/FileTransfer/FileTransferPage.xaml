@@ -333,7 +333,7 @@
                         
                         <!-- Clear Records Button -->
                         <Button x:Name="ClearRecordsButton"
-                               Content="Clear All Records"
+                               x:Uid="FileTransfer_ClearAllRecords"
                                HorizontalAlignment="Stretch"
                                Click="ClearRecordsButton_Click">
                             <Button.Template>

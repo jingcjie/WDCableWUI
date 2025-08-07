@@ -103,12 +103,47 @@ namespace WDCableWUI.Services
         }
         
         /// <summary>
+        /// Gets the current download path.
+        /// </summary>
+        public string DownloadPath => _downloadPath;
+        
+        /// <summary>
+        /// Sets the download path and saves it to DataManager.
+        /// </summary>
+        /// <param name="path">The new download path</param>
+        public void SetDownloadPath(string path)
+        {
+            try
+            {
+                _downloadPath = path;
+                var dataManager = ServiceManager.DataManager;
+                dataManager?.SetDownloadPath(path);
+                OnStatusChanged($"Download path updated: {path}");
+            }
+            catch (Exception ex)
+            {
+                OnErrorOccurred($"Failed to update download path: {ex.Message}");
+            }
+        }
+        
+        /// <summary>
         /// Private constructor to enforce singleton pattern.
         /// </summary>
         private FileTransferService()
         {
             _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
-            _downloadPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
+            
+            // Get download path from DataManager
+            try
+            {
+                var dataManager = ServiceManager.DataManager;
+                _downloadPath = dataManager?.GetDownloadPath() ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
+            }
+            catch
+            {
+                // Fallback to default path if DataManager is not available
+                _downloadPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
+            }
             
             // Subscribe to ConnectionService events
             var connectionService = ServiceManager.ConnectionService;
@@ -278,22 +313,7 @@ namespace WDCableWUI.Services
             }
         }
         
-        /// <summary>
-        /// Sets the download path for received files.
-        /// </summary>
-        /// <param name="downloadPath">The path where received files should be saved</param>
-        public void SetDownloadPath(string downloadPath)
-        {
-            if (string.IsNullOrWhiteSpace(downloadPath))
-                throw new ArgumentException("Download path cannot be null or empty", nameof(downloadPath));
-                
-            lock (_lock)
-            {
-                _downloadPath = downloadPath;
-            }
-            
-            OnStatusChanged($"Download path updated to: {downloadPath}");
-        }
+
 
         /// Sends a file through the file transfer connection.
         /// </summary>

@@ -6,6 +6,7 @@ using Microsoft.UI.Xaml.Navigation;
 using System;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using WDCableWUI.Services;
 using Windows.System;
@@ -77,13 +78,17 @@ namespace WDCableWUI.UI.Chat
         private readonly Microsoft.UI.Dispatching.DispatcherQueue _dispatcherQueue;
         private readonly ObservableCollection<ChatMessage> _messages;
         private bool _isConnected;
+        private readonly DataManager _dataManager;
         
         public ChatPage()
         {
             InitializeComponent();
             _dispatcherQueue = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
             _messages = new ObservableCollection<ChatMessage>();
+            _dataManager = DataManager.Instance;
             
+            // Load chat history on initialization
+            LoadChatHistory();
         }
 
         protected override void OnNavigatedTo(NavigationEventArgs e)
@@ -115,6 +120,9 @@ namespace WDCableWUI.UI.Chat
         protected override void OnNavigatedFrom(NavigationEventArgs e)
         {
             base.OnNavigatedFrom(e);
+            
+            // Save chat history when navigating away
+            SaveChatHistory();
             
             // Unsubscribe from events
             if (_chatService != null)
@@ -165,6 +173,86 @@ namespace WDCableWUI.UI.Chat
                 }
             });
         }
+        
+        /// <summary>
+        /// Saves the current chat history to persistent storage.
+        /// </summary>
+        private void SaveChatHistory()
+        {
+            try
+            {
+                var chatData = _messages.Select(m => new ChatMessageData
+                {
+                    Type = (int)m.Type,
+                    Content = m.Content,
+                    Timestamp = m.Timestamp
+                }).ToList();
+                
+                _dataManager.SaveChatHistory(chatData);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Failed to save chat history: {ex.Message}");
+            }
+        }
+        
+        /// <summary>
+        /// Loads chat history from persistent storage and displays it.
+        /// </summary>
+        private void LoadChatHistory()
+        {
+            try
+            {
+                var chatData = _dataManager.LoadChatHistory();
+                
+                foreach (var data in chatData)
+                {
+                    var message = new ChatMessage
+                    {
+                        Type = (ChatMessage.MessageType)data.Type,
+                        Content = data.Content,
+                        Timestamp = data.Timestamp
+                    };
+                    
+                    _messages.Add(message);
+                    
+                    // Create UI element for the message
+                    var messageElement = CreateMessageElement(message);
+                    MessagesItemsControl.Items.Add(messageElement);
+                }
+                
+                // Hide empty state if we have messages
+                if (_messages.Count > 0)
+                {
+                    EmptyStatePanel.Visibility = Visibility.Collapsed;
+                }
+                
+                // Auto-scroll to bottom after loading
+                ScrollToBottom();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Failed to load chat history: {ex.Message}");
+            }
+        }
+        
+        /// <summary>
+        /// Clears all chat history from both UI and persistent storage.
+        /// </summary>
+        public void ClearChatHistory()
+        {
+            try
+            {
+                _messages.Clear();
+                MessagesItemsControl.Items.Clear();
+                _dataManager.ClearChatHistory();
+                EmptyStatePanel.Visibility = Visibility.Visible;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Failed to clear chat history: {ex.Message}");
+            }
+        }
     
         private void OnChatServiceStatusChanged(object? sender, string status)
         {
@@ -198,6 +286,9 @@ namespace WDCableWUI.UI.Chat
                 // Create UI element for the message
                 var messageElement = CreateMessageElement(message);
                 MessagesItemsControl.Items.Add(messageElement);
+                
+                // Auto-save chat history after adding new message
+                SaveChatHistory();
                 
                 // Hide empty state when first message is added
                 if (_messages.Count == 1)
@@ -328,6 +419,18 @@ namespace WDCableWUI.UI.Chat
                     e.Handled = true;
                     SendMessage();
                 }
+            }
+        }
+        
+        private void ClearHistoryButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                ClearChatHistory();
+            }
+            catch (Exception ex)
+            {
+                AddSystemMessage($"Failed to clear chat history: {ex.Message}");
             }
         }
     }
