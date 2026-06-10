@@ -10,6 +10,9 @@
     <PublishProfile>win-$(Platform).pubxml</PublishProfile>
     <UseWinUI>true</UseWinUI>
     <EnableMsixTooling>true</EnableMsixTooling>
+    <!-- Keep direct/unpackaged debug launches from failing before WinUI activation. -->
+    <WindowsAppSdkBootstrapInitialize>true</WindowsAppSdkBootstrapInitialize>
+    <WindowsAppSDKBootstrapAutoInitializeOptions_OnPackageIdentity_NOOP>true</WindowsAppSDKBootstrapAutoInitializeOptions_OnPackageIdentity_NOOP>
     <Nullable>enable</Nullable>
     <EnableDefaultPriItems>false</EnableDefaultPriItems>
     <DefaultLanguage>en</DefaultLanguage>
