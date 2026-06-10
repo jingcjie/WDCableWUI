@@ -38,37 +38,15 @@ Use `not run` for scenarios you cannot test.
 8. `F-08`, then `W-08`
 9. `F-09`, then `W-09`
 
-## W-01 - Build Warning And Page Subscription Cleanup
+## W-01 - Build Warning And Page Subscription Cleanup - Finished
 
 Goal: reduce crash risk without changing Wi-Fi Direct behavior.
 
-Codex work:
+Result:
 
-- [ ] Record current `dotnet build WDCableWUI.sln` warning output before edits.
-- [ ] Fix duplicate and unused usings.
-- [ ] Fix nullable event signatures and view model initialization warnings.
-- [ ] Remove unused caught exception variables.
-- [ ] Audit page event subscriptions:
-  - `ConnectionPage`
-  - `ChatPage`
-  - `SpeedTestPage`
-  - `FileTransferPage`
-  - `SettingsPage`
-- [ ] Ensure pages unsubscribe reliably on navigation/disposal and do not double-subscribe after revisiting a page.
-- [ ] Run `dotnet build WDCableWUI.sln` and report remaining warnings.
-
-User test after Codex finishes:
-
-- [ ] Run the Windows app.
-- [ ] Open each page at least 10 times by switching navigation items.
-- [ ] Change theme and language once.
-- [ ] Close and reopen the app 5 times.
-
-Report back:
-
-- App launch success count out of 5.
-- Whether page switching caused duplicate messages, duplicate status updates, crash, or UI lag.
-- Remaining build warning count Codex reported.
+- Codex work complete.
+- User test passed.
+- Final `dotnet build WDCableWUI.sln`: 0 warnings, 0 errors.
 
 ## W-02 - Startup And Service Initialization Safety
 

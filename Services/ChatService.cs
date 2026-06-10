@@ -205,7 +205,7 @@ namespace WDCableWUI.Services
                     MessageReceived?.Invoke(this, message);
                 });
             }
-            catch (Exception ex)
+            catch
             {
                 // Ignore dispatcher errors during message delivery
             }
@@ -303,7 +303,7 @@ namespace WDCableWUI.Services
                                         }
                                     }
                                 }
-                                catch (JsonException ex)
+                                catch (JsonException)
                                 {
                                     // Fallback to plain text for backward compatibility
                                     OnMessageReceived(line);

@@ -1,21 +1,11 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Data;
-using Microsoft.UI.Xaml.Input;
-using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Navigation;
 using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Runtime.InteropServices.WindowsRuntime;
-using Windows.Foundation;
-using Windows.Foundation.Collections;
 using WDCableWUI.Services;
 using System.Threading.Tasks;
 using Microsoft.UI.Dispatching;
-using System.ComponentModel;
 
 namespace WDCableWUI.UI.Connection
 {
@@ -47,6 +37,7 @@ namespace WDCableWUI.UI.Connection
     public sealed partial class ConnectionPage : Page
     {
         private WiFiDirectService? _wifiDirectService;
+        private WiFiDirectService? _subscribedWiFiDirectService;
         private readonly DispatcherQueue _dispatcherQueue;
         private bool _isInitialized = false;
 
@@ -54,26 +45,20 @@ namespace WDCableWUI.UI.Connection
         {
             InitializeComponent();
             _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
-            InitializeWiFiDirectService();
+            Unloaded += OnPageUnloaded;
         }
 
         private void InitializeWiFiDirectService()
         {
             try
             {
+                UnsubscribeFromWiFiDirectEvents();
+
                 // Get the singleton WiFiDirectService from ServiceManager with null checks
                 _wifiDirectService = ServiceManager.IsInitialized ? ServiceManager.WiFiDirectService : null;
                 
-                // Subscribe to events
                 if (_wifiDirectService != null)
                 {
-                    _wifiDirectService.DeviceDiscovered += OnDeviceDiscovered;
-                    _wifiDirectService.DeviceConnected += OnDeviceConnected;
-                    _wifiDirectService.DeviceDisconnected += OnDeviceDisconnected;
-                    _wifiDirectService.StatusChanged += OnStatusChanged;
-                    _wifiDirectService.ErrorOccurred += OnErrorOccurred;
-                    _wifiDirectService.ConnectionRequested += OnConnectionRequested;
-                    
                     // Bind device list to ListView
                     DeviceListView.ItemsSource = _wifiDirectService.DiscoveredDevices;
                     _isInitialized = true;
@@ -88,12 +73,49 @@ namespace WDCableWUI.UI.Connection
             {
                 ShowError($"Failed to initialize WiFi Direct service: {ex.Message}");
                 _wifiDirectService = null;
+                _isInitialized = false;
             }
+        }
+
+        private void SubscribeToWiFiDirectEvents()
+        {
+            if (_wifiDirectService == null || _subscribedWiFiDirectService == _wifiDirectService)
+            {
+                return;
+            }
+
+            UnsubscribeFromWiFiDirectEvents();
+
+            _wifiDirectService.DeviceDiscovered += OnDeviceDiscovered;
+            _wifiDirectService.DeviceConnected += OnDeviceConnected;
+            _wifiDirectService.DeviceDisconnected += OnDeviceDisconnected;
+            _wifiDirectService.StatusChanged += OnStatusChanged;
+            _wifiDirectService.ErrorOccurred += OnErrorOccurred;
+            _wifiDirectService.ConnectionRequested += OnConnectionRequested;
+            _subscribedWiFiDirectService = _wifiDirectService;
+        }
+
+        private void UnsubscribeFromWiFiDirectEvents()
+        {
+            if (_subscribedWiFiDirectService == null)
+            {
+                return;
+            }
+
+            _subscribedWiFiDirectService.DeviceDiscovered -= OnDeviceDiscovered;
+            _subscribedWiFiDirectService.DeviceConnected -= OnDeviceConnected;
+            _subscribedWiFiDirectService.DeviceDisconnected -= OnDeviceDisconnected;
+            _subscribedWiFiDirectService.StatusChanged -= OnStatusChanged;
+            _subscribedWiFiDirectService.ErrorOccurred -= OnErrorOccurred;
+            _subscribedWiFiDirectService.ConnectionRequested -= OnConnectionRequested;
+            _subscribedWiFiDirectService = null;
         }
 
         protected override void OnNavigatedTo(NavigationEventArgs e)
         {
             base.OnNavigatedTo(e);
+            InitializeWiFiDirectService();
+            SubscribeToWiFiDirectEvents();
             UpdateUI();
         }
 
@@ -106,6 +128,8 @@ namespace WDCableWUI.UI.Connection
             {
                 _wifiDirectService.StopScanning();
             }
+
+            UnsubscribeFromWiFiDirectEvents();
         }
 
         private async void OnDiscoverableToggled(object sender, RoutedEventArgs e)
@@ -187,9 +211,10 @@ namespace WDCableWUI.UI.Connection
         {
             if (!_isInitialized) return;
             
-            var button = sender as Button;
-            var device = button?.Tag as WiFiDirectDevice;
-            if (device == null || device.IsConnected) return;
+            if (sender is not Button button || button.Tag is not WiFiDirectDevice device || device.IsConnected)
+            {
+                return;
+            }
 
             // Disable the button to prevent multiple clicks
             button.IsEnabled = false;
@@ -215,7 +240,7 @@ namespace WDCableWUI.UI.Connection
             {
                 // Re-enable the button after connection attempt completes
                 // Only re-enable if the device is not connected (connection failed)
-                if (device != null && !device.IsConnected)
+                if (!device.IsConnected)
                 {
                     button.IsEnabled = true;
                 }
@@ -352,6 +377,11 @@ namespace WDCableWUI.UI.Connection
                 Visibility.Visible : Visibility.Collapsed;
         }
 
+        private void OnPageUnloaded(object sender, RoutedEventArgs e)
+        {
+            UnsubscribeFromWiFiDirectEvents();
+        }
+
         private async Task<bool> ShowConnectionRequestDialog(string deviceName)
         {
             try
@@ -398,21 +428,5 @@ namespace WDCableWUI.UI.Connection
             }
         }
 
-        // Cleanup when page is disposed
-        protected override void OnNavigatingFrom(NavigatingCancelEventArgs e)
-        {
-            base.OnNavigatingFrom(e);
-            
-            // Unsubscribe from events but don't dispose the service (managed by ServiceManager)
-            if (_wifiDirectService != null)
-            {
-                _wifiDirectService.DeviceDiscovered -= OnDeviceDiscovered;
-                _wifiDirectService.DeviceConnected -= OnDeviceConnected;
-                _wifiDirectService.DeviceDisconnected -= OnDeviceDisconnected;
-                _wifiDirectService.StatusChanged -= OnStatusChanged;
-                _wifiDirectService.ErrorOccurred -= OnErrorOccurred;
-                _wifiDirectService.ConnectionRequested -= OnConnectionRequested;
-            }
-        }
     }
 }

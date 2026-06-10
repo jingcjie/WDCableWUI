@@ -193,38 +193,31 @@ namespace WDCableWUI.Services
             {
                 throw new InvalidOperationException("Local IP is not available");
             }
-                
+
             var localEndPoint = new IPEndPoint(IPAddress.Parse(_wifiDirectService.LocalIP), 0);
-            
-            try
-            {
-                // Start Chat Server
-                _chatServer = new TcpListener(localEndPoint.Address, CHAT_PORT);
-                _chatServer.Start();
-                OnStatusChanged($"Chat server started on {localEndPoint.Address}:{CHAT_PORT}");
-                
-                // Start Speed Test Server
-                _speedTestServer = new TcpListener(localEndPoint.Address, SPEED_TEST_PORT);
-                _speedTestServer.Start();
-                OnStatusChanged($"Speed test server started on {localEndPoint.Address}:{SPEED_TEST_PORT}");
-                
-                // Start File Server
-                _fileServer = new TcpListener(localEndPoint.Address, FILE_PORT);
-                _fileServer.Start();
-                OnStatusChanged($"File server started on {localEndPoint.Address}:{FILE_PORT}");
-                
-                // Accept connections asynchronously
-                var token = _cancellationTokenSource?.Token ?? CancellationToken.None;
-                _ = Task.Run(() => AcceptConnectionsAsync(_chatServer, "Chat", (client) => _chatClient = client), token);
-                _ = Task.Run(() => AcceptConnectionsAsync(_speedTestServer, "SpeedTest", (client) => _speedTestClient = client), token);
-                _ = Task.Run(() => AcceptConnectionsAsync(_fileServer, "File", (client) => _fileClient = client), token);
-                
-                return Task.CompletedTask;
-            }
-            catch (Exception ex)
-            {
-                throw;
-            }
+
+            // Start Chat Server
+            _chatServer = new TcpListener(localEndPoint.Address, CHAT_PORT);
+            _chatServer.Start();
+            OnStatusChanged($"Chat server started on {localEndPoint.Address}:{CHAT_PORT}");
+
+            // Start Speed Test Server
+            _speedTestServer = new TcpListener(localEndPoint.Address, SPEED_TEST_PORT);
+            _speedTestServer.Start();
+            OnStatusChanged($"Speed test server started on {localEndPoint.Address}:{SPEED_TEST_PORT}");
+
+            // Start File Server
+            _fileServer = new TcpListener(localEndPoint.Address, FILE_PORT);
+            _fileServer.Start();
+            OnStatusChanged($"File server started on {localEndPoint.Address}:{FILE_PORT}");
+
+            // Accept connections asynchronously
+            var token = _cancellationTokenSource?.Token ?? CancellationToken.None;
+            _ = Task.Run(() => AcceptConnectionsAsync(_chatServer, "Chat", (client) => _chatClient = client), token);
+            _ = Task.Run(() => AcceptConnectionsAsync(_speedTestServer, "SpeedTest", (client) => _speedTestClient = client), token);
+            _ = Task.Run(() => AcceptConnectionsAsync(_fileServer, "File", (client) => _fileClient = client), token);
+
+            return Task.CompletedTask;
         }
         
         private async Task AcceptConnectionsAsync(TcpListener server, string serviceName, Action<TcpClient> setClient)

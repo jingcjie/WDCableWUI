@@ -75,6 +75,7 @@ namespace WDCableWUI.UI.Chat
     public sealed partial class ChatPage : Page
     {
         private ChatService? _chatService;
+        private ChatService? _subscribedChatService;
         private readonly Microsoft.UI.Dispatching.DispatcherQueue _dispatcherQueue;
         private readonly ObservableCollection<ChatMessage> _messages;
         private bool _isConnected;
@@ -86,6 +87,7 @@ namespace WDCableWUI.UI.Chat
             _dispatcherQueue = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
             _messages = new ObservableCollection<ChatMessage>();
             _dataManager = DataManager.Instance;
+            Unloaded += OnPageUnloaded;
             
             // Load chat history on initialization
             LoadChatHistory();
@@ -99,14 +101,7 @@ namespace WDCableWUI.UI.Chat
             {
                 // Access ChatService through ServiceManager with null checks
                 _chatService = ServiceManager.IsInitialized ? ServiceManager.ChatService : null;
-                
-                // Subscribe to service events if ChatService is available
-                if (_chatService != null)
-                {
-                    _chatService.StatusChanged += OnChatServiceStatusChanged;
-                    _chatService.ErrorOccurred += OnChatServiceErrorOccurred;
-                    _chatService.MessageReceived += OnMessageReceived;
-                }
+                SubscribeToChatEvents();
             }
             catch (Exception ex)
             {
@@ -124,13 +119,41 @@ namespace WDCableWUI.UI.Chat
             // Save chat history when navigating away
             SaveChatHistory();
             
-            // Unsubscribe from events
-            if (_chatService != null)
+            UnsubscribeFromChatEvents();
+        }
+
+        private void SubscribeToChatEvents()
+        {
+            if (_chatService == null || _subscribedChatService == _chatService)
             {
-                _chatService.StatusChanged -= OnChatServiceStatusChanged;
-                _chatService.ErrorOccurred -= OnChatServiceErrorOccurred;
-                _chatService.MessageReceived -= OnMessageReceived;
+                return;
             }
+
+            UnsubscribeFromChatEvents();
+
+            _chatService.StatusChanged += OnChatServiceStatusChanged;
+            _chatService.ErrorOccurred += OnChatServiceErrorOccurred;
+            _chatService.MessageReceived += OnMessageReceived;
+            _subscribedChatService = _chatService;
+        }
+
+        private void UnsubscribeFromChatEvents()
+        {
+            if (_subscribedChatService == null)
+            {
+                return;
+            }
+
+            _subscribedChatService.StatusChanged -= OnChatServiceStatusChanged;
+            _subscribedChatService.ErrorOccurred -= OnChatServiceErrorOccurred;
+            _subscribedChatService.MessageReceived -= OnMessageReceived;
+            _subscribedChatService = null;
+        }
+
+        private void OnPageUnloaded(object sender, RoutedEventArgs e)
+        {
+            SaveChatHistory();
+            UnsubscribeFromChatEvents();
         }
         
         private void SetupMessagesDisplay()

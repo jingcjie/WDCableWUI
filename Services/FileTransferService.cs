@@ -248,7 +248,7 @@ namespace WDCableWUI.Services
                     FileReceived?.Invoke(this, new FileTransferEventArgs(fileName, filePath, fileSize));
                 });
             }
-            catch (Exception ex)
+            catch
             {
                 // Ignore dispatcher errors during event delivery
             }
@@ -268,7 +268,7 @@ namespace WDCableWUI.Services
                     FileSent?.Invoke(this, new FileTransferEventArgs(fileName, filePath, fileSize));
                 });
             }
-            catch (Exception ex)
+            catch
             {
                 // Ignore dispatcher errors during event delivery
             }
@@ -288,7 +288,7 @@ namespace WDCableWUI.Services
                     TransferProgress?.Invoke(this, new FileTransferProgressEventArgs(fileName, bytesTransferred, totalBytes));
                 });
             }
-            catch (Exception ex)
+            catch
             {
                 // Ignore dispatcher errors during event delivery
             }
@@ -307,7 +307,7 @@ namespace WDCableWUI.Services
                     FileReceiveStarted?.Invoke(this, new FileReceiveStartedEventArgs(fileName, fileSize));
                 });
             }
-            catch (Exception ex)
+            catch
             {
                 // Ignore dispatcher errors during event delivery
             }

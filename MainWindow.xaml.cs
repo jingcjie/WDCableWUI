@@ -1,18 +1,9 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Runtime.InteropServices.WindowsRuntime;
 using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Controls.Primitives;
-using Microsoft.UI.Xaml.Data;
-using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
-using Microsoft.UI.Xaml.Navigation;
-using Windows.Foundation;
-using Windows.Foundation.Collections;
 using WDCableWUI.UI.Connection;
 using WDCableWUI.UI.Chat;
 using WDCableWUI.UI.SpeedTest;
@@ -22,9 +13,7 @@ using WDCableWUI.Services;
 using Microsoft.UI.Windowing;
 using Microsoft.UI;
 using WinRT.Interop;
-using Windows.Graphics;
 using System.Diagnostics;
-using WDCableWUI.Services;
 
 namespace WDCableWUI
 {
@@ -208,7 +197,7 @@ namespace WDCableWUI
             }
         }
         
-        private async void OnOtherSideNotRunningApp(object? sender, EventArgs e)
+        private void OnOtherSideNotRunningApp(object? sender, EventArgs e)
         {
             // Ensure UI updates happen on the UI thread
             DispatcherQueue.TryEnqueue(async () =>

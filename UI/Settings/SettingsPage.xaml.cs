@@ -2,8 +2,6 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
 using System;
-using System.Globalization;
-using Windows.Globalization;
 using Windows.Storage;
 using Windows.System;
 using WDCableWUI.Services;
@@ -19,9 +17,7 @@ namespace WDCableWUI.UI.Settings
         {
             this.InitializeComponent();
             InitializeDataManager();
-            
-            LoadSettings();
-            _isInitializing = false;
+            LoadSettingsWithoutSelectionSideEffects();
         }
         
         private void InitializeDataManager()
@@ -40,7 +36,21 @@ namespace WDCableWUI.UI.Settings
         protected override void OnNavigatedTo(NavigationEventArgs e)
         {
             base.OnNavigatedTo(e);
-            LoadSettings();
+            InitializeDataManager();
+            LoadSettingsWithoutSelectionSideEffects();
+        }
+
+        private void LoadSettingsWithoutSelectionSideEffects()
+        {
+            _isInitializing = true;
+            try
+            {
+                LoadSettings();
+            }
+            finally
+            {
+                _isInitializing = false;
+            }
         }
 
         private void LoadSettings()

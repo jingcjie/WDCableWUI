@@ -1,20 +1,6 @@
 using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Runtime.InteropServices.WindowsRuntime;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Controls.Primitives;
-using Microsoft.UI.Xaml.Data;
-using Microsoft.UI.Xaml.Input;
-using Microsoft.UI.Xaml.Media;
-using Microsoft.UI.Xaml.Navigation;
-using Microsoft.UI.Xaml.Shapes;
-using Windows.ApplicationModel;
-using Windows.ApplicationModel.Activation;
-using Windows.Foundation;
-using Windows.Foundation.Collections;
 using WDCableWUI.Services;
 using Windows.Globalization;
 using Windows.Storage;
@@ -76,7 +62,7 @@ namespace WDCableWUI
         {
             try
             {
-                string savedLanguage = null;
+                string? savedLanguage = null;
                 
                 // Try to get language from DataManager first, but since this runs early,
                 // we need to fallback to direct access
@@ -124,7 +110,7 @@ namespace WDCableWUI
         {
             try
             {
-                string savedTheme = null;
+                string? savedTheme = null;
                 
                 // Try to get theme from DataManager first, but since this runs early,
                 // we need to fallback to direct access

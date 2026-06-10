@@ -495,9 +495,14 @@ namespace WDCableWUI.Services
             DeviceDiscovered?.Invoke(this, device);
         }
 
-        protected virtual void OnDeviceConnected(WiFiDirectDevice device)
+        protected virtual void OnDeviceConnected(WiFiDirectDevice? device)
         {
-            System.Diagnostics.Debug.WriteLine($"[WiFiDirectService] OnDeviceConnected called for device: {device?.Name}");
+            if (device == null)
+            {
+                return;
+            }
+
+            System.Diagnostics.Debug.WriteLine($"[WiFiDirectService] OnDeviceConnected called for device: {device.Name}");
             DeviceConnected?.Invoke(this, device);
         }
 

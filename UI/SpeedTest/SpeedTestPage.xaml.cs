@@ -19,10 +19,12 @@ namespace WDCableWUI.UI.SpeedTest
         private bool _isUploadTestRunning;
         private bool _isDownloadTestRunning;
         private SpeedTestService? _speedTestService;
+        private SpeedTestService? _subscribedSpeedTestService;
         private ConnectionService? _connectionService;
+        private ConnectionService? _subscribedConnectionService;
         private readonly DataManager _dataManager;
 
-        public event PropertyChangedEventHandler PropertyChanged;
+        public event PropertyChangedEventHandler? PropertyChanged;
 
         public SpeedTestPage()
         {
@@ -31,8 +33,35 @@ namespace WDCableWUI.UI.SpeedTest
             _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
             TestResultsListView.ItemsSource = _testResults;
             _dataManager = DataManager.Instance;
-            
-            // Initialize services with null checks
+            Unloaded += OnPageUnloaded;
+
+            UpdateConnectionStatus();
+            UpdateTestButtonStates();
+
+            // Load speed test records on initialization
+            LoadSpeedTestRecords();
+        }
+
+        protected override void OnNavigatedTo(NavigationEventArgs e)
+        {
+            base.OnNavigatedTo(e);
+            InitializeServices();
+            SubscribeToServiceEvents();
+            UpdateConnectionStatus();
+            UpdateTestButtonStates();
+        }
+
+        protected override void OnNavigatedFrom(NavigationEventArgs e)
+        {
+            base.OnNavigatedFrom(e);
+
+            // Save speed test records when navigating away
+            SaveSpeedTestRecords();
+            UnsubscribeFromServiceEvents();
+        }
+
+        private void InitializeServices()
+        {
             try
             {
                 _speedTestService = ServiceManager.IsInitialized ? ServiceManager.SpeedTestService : null;
@@ -44,49 +73,73 @@ namespace WDCableWUI.UI.SpeedTest
                 _speedTestService = null;
                 _connectionService = null;
             }
-            
-            // Subscribe to service events if SpeedTestService is available
-            if (_speedTestService != null)
+        }
+
+        private void SubscribeToServiceEvents()
+        {
+            if (_speedTestService != null && _subscribedSpeedTestService != _speedTestService)
             {
+                UnsubscribeFromSpeedTestEvents();
+
                 _speedTestService.StatusChanged += OnSpeedTestStatusChanged;
                 _speedTestService.ErrorOccurred += OnSpeedTestErrorOccurred;
                 _speedTestService.UploadCompleted += OnSpeedTestCompleted;
                 _speedTestService.DownloadCompleted += OnSpeedTestCompleted;
+                _subscribedSpeedTestService = _speedTestService;
             }
-            
-            // Subscribe to connection service events if available
-            if (_connectionService != null)
+
+            if (_connectionService != null && _subscribedConnectionService != _connectionService)
             {
+                UnsubscribeFromConnectionEvents();
+
                 _connectionService.StatusChanged += OnConnectionStatusChanged;
+                _subscribedConnectionService = _connectionService;
             }
-            
-            UpdateConnectionStatus();
-            UpdateTestButtonStates();
-            
-            // Load speed test records on initialization
-            LoadSpeedTestRecords();
         }
 
-        protected override void OnNavigatedTo(NavigationEventArgs e)
+        private void UnsubscribeFromServiceEvents()
         {
-            base.OnNavigatedTo(e);
-            UpdateConnectionStatus();
+            UnsubscribeFromSpeedTestEvents();
+            UnsubscribeFromConnectionEvents();
         }
 
-        protected override void OnNavigatedFrom(NavigationEventArgs e)
+        private void UnsubscribeFromSpeedTestEvents()
         {
-            base.OnNavigatedFrom(e);
-            
-            // Save speed test records when navigating away
+            if (_subscribedSpeedTestService == null)
+            {
+                return;
+            }
+
+            _subscribedSpeedTestService.StatusChanged -= OnSpeedTestStatusChanged;
+            _subscribedSpeedTestService.ErrorOccurred -= OnSpeedTestErrorOccurred;
+            _subscribedSpeedTestService.UploadCompleted -= OnSpeedTestCompleted;
+            _subscribedSpeedTestService.DownloadCompleted -= OnSpeedTestCompleted;
+            _subscribedSpeedTestService = null;
+        }
+
+        private void UnsubscribeFromConnectionEvents()
+        {
+            if (_subscribedConnectionService == null)
+            {
+                return;
+            }
+
+            _subscribedConnectionService.StatusChanged -= OnConnectionStatusChanged;
+            _subscribedConnectionService = null;
+        }
+
+        private void OnPageUnloaded(object sender, RoutedEventArgs e)
+        {
             SaveSpeedTestRecords();
+            UnsubscribeFromServiceEvents();
         }
 
-        private void OnPropertyChanged(string propertyName)
+        private void OnPropertyChanged(string? propertyName = null)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
 
-        private void OnSpeedTestStatusChanged(object sender, string status)
+        private void OnSpeedTestStatusChanged(object? sender, string status)
         {
             _dispatcherQueue.TryEnqueue(() =>
             {
@@ -95,7 +148,7 @@ namespace WDCableWUI.UI.SpeedTest
             });
         }
 
-        private void OnSpeedTestErrorOccurred(object sender, string error)
+        private void OnSpeedTestErrorOccurred(object? sender, string error)
         {
             _dispatcherQueue.TryEnqueue(() =>
             {
@@ -110,7 +163,7 @@ namespace WDCableWUI.UI.SpeedTest
             });
         }
 
-        private void OnSpeedTestCompleted(object sender, SpeedTestResult result)
+        private void OnSpeedTestCompleted(object? sender, SpeedTestResult result)
         {
             _dispatcherQueue.TryEnqueue(() =>
             {
@@ -140,7 +193,7 @@ namespace WDCableWUI.UI.SpeedTest
             });
         }
 
-        private void OnConnectionStatusChanged(object sender, string status)
+        private void OnConnectionStatusChanged(object? sender, string status)
         {
             _dispatcherQueue.TryEnqueue(() =>
             {
@@ -215,7 +268,11 @@ namespace WDCableWUI.UI.SpeedTest
 
         private async void RefreshConnectionButton_Click(object sender, RoutedEventArgs e)
         {
-            var button = sender as Button;
+            if (sender is not Button button)
+            {
+                return;
+            }
+
             button.IsEnabled = false;
             button.Content = "Refreshing...";
             

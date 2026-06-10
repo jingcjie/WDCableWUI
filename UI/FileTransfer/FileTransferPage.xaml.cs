@@ -1,24 +1,17 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
-using Microsoft.UI.Xaml.Data;
-using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Navigation;
+using Microsoft.UI;
 using System;
-using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
-using System.Runtime.InteropServices.WindowsRuntime;
 using System.Threading.Tasks;
-using Windows.Foundation;
-using Windows.Foundation.Collections;
 using Windows.Storage;
 using Windows.Storage.Pickers;
 using Windows.ApplicationModel.DataTransfer;
-using Microsoft.UI;
-using Windows.UI;
 using WDCableWUI.Services;
 
 namespace WDCableWUI.UI.FileTransfer
@@ -30,11 +23,11 @@ namespace WDCableWUI.UI.FileTransfer
     /// </summary>
     public class TransferRecord
     {
-        public string FileName { get; set; }
-        public string Status { get; set; }
-        public string TimeStamp { get; set; }
-        public string TypeIcon { get; set; }
-        public SolidColorBrush StatusColor { get; set; }
+        public string FileName { get; set; } = string.Empty;
+        public string Status { get; set; } = string.Empty;
+        public string TimeStamp { get; set; } = string.Empty;
+        public string TypeIcon { get; set; } = string.Empty;
+        public SolidColorBrush StatusColor { get; set; } = new SolidColorBrush(Colors.Transparent);
         public double Progress { get; set; }
         public Visibility ProgressVisibility { get; set; }
         public TransferType Type { get; set; }
@@ -51,11 +44,12 @@ namespace WDCableWUI.UI.FileTransfer
     /// </summary>
     public sealed partial class FileTransferPage : Page
     {
-        private ObservableCollection<TransferRecord> _transferRecords;
-        private ObservableCollection<TransferRecord> _filteredRecords;
+        private readonly ObservableCollection<TransferRecord> _transferRecords = new();
+        private readonly ObservableCollection<TransferRecord> _filteredRecords = new();
         private string _currentFilter = "All";
         private StorageFile? _selectedFile = null;
         private FileTransferService? _fileTransferService;
+        private FileTransferService? _subscribedFileTransferService;
 
         public FileTransferPage()
         {
@@ -63,15 +57,12 @@ namespace WDCableWUI.UI.FileTransfer
             InitializeCollections();
             InitializeDefaultSettings();
             InitializeFileTransferService();
+            Unloaded += OnPageUnloaded;
         }
 
         private void InitializeCollections()
         {
-            _transferRecords = new ObservableCollection<TransferRecord>();
-            _filteredRecords = new ObservableCollection<TransferRecord>();
-            
             TransferRecordsList.ItemsSource = _filteredRecords;
-
         }
 
         private void InitializeDefaultSettings()
@@ -89,10 +80,6 @@ namespace WDCableWUI.UI.FileTransfer
             try
             {
                 _fileTransferService = ServiceManager.IsInitialized ? ServiceManager.FileTransferService : null;
-                if (_fileTransferService != null)
-                {
-                    SubscribeToFileTransferEvents();
-                }
             }
             catch (Exception ex)
             {
@@ -116,39 +103,55 @@ namespace WDCableWUI.UI.FileTransfer
         
         private void SubscribeToFileTransferEvents()
         {
-            if (_fileTransferService != null)
+            if (_fileTransferService == null || _subscribedFileTransferService == _fileTransferService)
             {
-                _fileTransferService.FileSent += OnFileSent;
-                _fileTransferService.FileReceived += OnFileReceived;
-                _fileTransferService.FileReceiveStarted += OnFileReceiveStarted;
-                _fileTransferService.TransferProgress += OnTransferProgress;
-                _fileTransferService.StatusChanged += OnFileTransferStatusChanged;
-                _fileTransferService.ErrorOccurred += OnFileTransferError;
+                return;
             }
+
+            UnsubscribeFromFileTransferEvents();
+
+            _fileTransferService.FileSent += OnFileSent;
+            _fileTransferService.FileReceived += OnFileReceived;
+            _fileTransferService.FileReceiveStarted += OnFileReceiveStarted;
+            _fileTransferService.TransferProgress += OnTransferProgress;
+            _fileTransferService.StatusChanged += OnFileTransferStatusChanged;
+            _fileTransferService.ErrorOccurred += OnFileTransferError;
+            _subscribedFileTransferService = _fileTransferService;
         }
         
         private void UnsubscribeFromFileTransferEvents()
         {
-            if (_fileTransferService != null)
+            if (_subscribedFileTransferService == null)
             {
-                _fileTransferService.FileSent -= OnFileSent;
-                _fileTransferService.FileReceived -= OnFileReceived;
-                _fileTransferService.FileReceiveStarted -= OnFileReceiveStarted;
-                _fileTransferService.TransferProgress -= OnTransferProgress;
-                _fileTransferService.StatusChanged -= OnFileTransferStatusChanged;
-                _fileTransferService.ErrorOccurred -= OnFileTransferError;
+                return;
             }
+
+            _subscribedFileTransferService.FileSent -= OnFileSent;
+            _subscribedFileTransferService.FileReceived -= OnFileReceived;
+            _subscribedFileTransferService.FileReceiveStarted -= OnFileReceiveStarted;
+            _subscribedFileTransferService.TransferProgress -= OnTransferProgress;
+            _subscribedFileTransferService.StatusChanged -= OnFileTransferStatusChanged;
+            _subscribedFileTransferService.ErrorOccurred -= OnFileTransferError;
+            _subscribedFileTransferService = null;
         }
 
         protected override void OnNavigatedTo(NavigationEventArgs e)
         {
             base.OnNavigatedTo(e);
+            InitializeFileTransferService();
+            SubscribeToFileTransferEvents();
+            UpdateSendButtonState();
         }
 
         protected override void OnNavigatedFrom(NavigationEventArgs e)
         {
             base.OnNavigatedFrom(e);
             // Unsubscribe from events when navigating away
+            UnsubscribeFromFileTransferEvents();
+        }
+
+        private void OnPageUnloaded(object sender, RoutedEventArgs e)
+        {
             UnsubscribeFromFileTransferEvents();
         }
 
