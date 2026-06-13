@@ -4,19 +4,24 @@ using System.Threading.Tasks;
 namespace WDCableWUI.Services
 {
     /// <summary>
-    /// Singleton service manager that provides global access to WiFiDirectService
-    /// and its managed ConnectionService.
+    /// Singleton service manager that provides global access to WiFiDirectService,
+    /// SessionManager, and feature services.
     /// </summary>
     public static class ServiceManager
     {
+        private const string DefaultWiFiDirectUnavailableMessage = "WiFi Direct services are unavailable. Settings and saved app data remain available, but connection, chat, speed test, and file transfer features require WiFi Direct support.";
+
         private static DataManager? _dataManager;
         private static WiFiDirectService? _wifiDirectService;
+        private static SessionManager? _sessionManager;
         private static ConnectionService? _connectionService;
         private static ChatService? _chatService;
         private static SpeedTestService? _speedTestService;
         private static FileTransferService? _fileTransferService;
         private static readonly object _lock = new object();
         private static bool _isInitialized = false;
+        private static bool _areWiFiDirectServicesAvailable = false;
+        private static string? _serviceInitializationError;
         
         /// <summary>
         /// Gets the singleton DataManager instance.
@@ -25,10 +30,18 @@ namespace WDCableWUI.Services
         {
             get
             {
-                if (!_isInitialized)
+                if (_dataManager == null)
                 {
-                    throw new InvalidOperationException("ServiceManager must be initialized before accessing services. Call Initialize() first.");
+                    try
+                    {
+                        _dataManager = DataManager.Instance;
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"DataManager is not available: {ex.Message}");
+                    }
                 }
+
                 return _dataManager;
             }
         }
@@ -40,14 +53,21 @@ namespace WDCableWUI.Services
         {
             get
             {
-                if (!_isInitialized)
-                {
-                    throw new InvalidOperationException("ServiceManager must be initialized before accessing services. Call Initialize() first.");
-                }
                 return _wifiDirectService;
             }
         }
         
+        /// <summary>
+        /// Gets the singleton SessionManager instance.
+        /// </summary>
+        public static SessionManager? SessionManager
+        {
+            get
+            {
+                return _sessionManager;
+            }
+        }
+
         /// <summary>
         /// Gets the singleton ConnectionService instance.
         /// </summary>
@@ -55,10 +75,6 @@ namespace WDCableWUI.Services
         {
             get
             {
-                if (!_isInitialized)
-                {
-                    throw new InvalidOperationException("ServiceManager must be initialized before accessing services. Call Initialize() first.");
-                }
                 return _connectionService;
             }
         }
@@ -70,10 +86,6 @@ namespace WDCableWUI.Services
         {
             get
             {
-                if (!_isInitialized)
-                {
-                    throw new InvalidOperationException("ServiceManager must be initialized before accessing services. Call Initialize() first.");
-                }
                 return _chatService;
             }
         }
@@ -85,10 +97,6 @@ namespace WDCableWUI.Services
         {
             get
             {
-                if (!_isInitialized)
-                {
-                    throw new InvalidOperationException("ServiceManager must be initialized before accessing services. Call Initialize() first.");
-                }
                 return _speedTestService;
             }
         }
@@ -100,10 +108,6 @@ namespace WDCableWUI.Services
         {
             get
             {
-                if (!_isInitialized)
-                {
-                    throw new InvalidOperationException("ServiceManager must be initialized before accessing services. Call Initialize() first.");
-                }
                 return _fileTransferService;
             }
         }
@@ -112,6 +116,21 @@ namespace WDCableWUI.Services
         /// Gets whether the ServiceManager has been initialized.
         /// </summary>
         public static bool IsInitialized => _isInitialized;
+
+        /// <summary>
+        /// Gets whether WiFi Direct dependent services were initialized successfully.
+        /// </summary>
+        public static bool AreWiFiDirectServicesAvailable => _areWiFiDirectServicesAvailable;
+
+        /// <summary>
+        /// Gets the last WiFi Direct service initialization error, if any.
+        /// </summary>
+        public static string? ServiceInitializationError => _serviceInitializationError;
+
+        /// <summary>
+        /// Gets a user-facing message for pages that depend on WiFi Direct services.
+        /// </summary>
+        public static string ServiceUnavailableMessage => _serviceInitializationError ?? DefaultWiFiDirectUnavailableMessage;
         
         /// <summary>
         /// Initializes the ServiceManager with a singleton WiFiDirectService instance.
@@ -125,50 +144,80 @@ namespace WDCableWUI.Services
                 {
                     return; // Already initialized
                 }
-                
+
+                _serviceInitializationError = null;
+                _areWiFiDirectServicesAvailable = false;
+
+                // Initialize DataManager independently so Settings and persisted app data still
+                // work when WiFi Direct services cannot be created.
                 try
                 {
-                    // Initialize DataManager first as it's needed by other services
                     _dataManager = DataManager.Instance;
-                    
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Failed to initialize DataManager: {ex.Message}");
+                    _serviceInitializationError = $"App settings storage could not be initialized: {ex.Message}";
+                }
+
+                _isInitialized = true;
+
+                try
+                {
+                    // Probe WiFi Direct support before constructing the service graph. Some
+                    // unsupported systems fail here rather than during service construction.
+                    _ = Windows.Devices.WiFiDirect.WiFiDirectDevice.GetDeviceSelector(
+                        Windows.Devices.WiFiDirect.WiFiDirectDeviceSelectorType.AssociationEndpoint);
+
                     _wifiDirectService = new WiFiDirectService();
+                    _sessionManager = WDCableWUI.Services.SessionManager.Instance;
+                    _sessionManager.Initialize(_wifiDirectService);
                     _connectionService = ConnectionService.Instance;
-                    
-                    // Initialize ConnectionService with WiFiDirectService
-                    _connectionService.Initialize(_wifiDirectService);
-                    
+
+                    // ConnectionService is now a compatibility facade over SessionManager.
+                    _connectionService.Initialize(_wifiDirectService, _sessionManager);
+
                     // Set up bidirectional event subscription
                     _wifiDirectService.SetConnectionService(_connectionService);
-                    
-                    // Set initialized flag before creating other services to avoid circular dependency
-                    _isInitialized = true;
-                    
+
                     // Initialize ChatService and SpeedTestService after WiFiDirectService
                     // These will be initialized when ConnectionService is established
                     InitializeAdditionalServices();
+                    _areWiFiDirectServicesAvailable = true;
                 }
                 catch (System.Runtime.InteropServices.COMException comEx) when (comEx.HResult == unchecked((int)0x80070032) || comEx.HResult == unchecked((int)0x80004005))
                 {
                     // WiFi Direct not supported (ERROR_NOT_SUPPORTED or E_FAIL)
-                    throw new NotSupportedException("WiFi Direct is not supported on this system. The Windows version may be too low or no wireless card is installed correctly.", comEx);
+                    HandleWiFiDirectInitializationFailure("WiFi Direct is not supported on this system. Check that Windows, the wireless adapter, and WiFi Direct drivers support WiFi Direct.", comEx);
                 }
                 catch (UnauthorizedAccessException uaEx)
                 {
                     // WiFi Direct access denied
-                    throw new NotSupportedException("WiFi Direct access is denied. Please check if WiFi is enabled and the application has necessary permissions.", uaEx);
+                    HandleWiFiDirectInitializationFailure("WiFi Direct access is denied. Please check that WiFi is enabled and the app has the required permissions.", uaEx);
                 }
                 catch (Exception ex)
                 {
                     // Check if the inner exception or message indicates WiFi Direct is not supported
                     if (ex.Message.Contains("WiFi Direct") || ex.Message.Contains("not supported") || ex.Message.Contains("wireless"))
                     {
-                        throw new NotSupportedException("WiFi Direct is not supported on this system. The Windows version may be too low or no wireless card is installed correctly.", ex);
+                        HandleWiFiDirectInitializationFailure("WiFi Direct is not supported on this system. Check that Windows, the wireless adapter, and WiFi Direct drivers support WiFi Direct.", ex);
                     }
-                    throw new InvalidOperationException($"Failed to initialize services: {ex.Message}", ex);
+                    else
+                    {
+                        HandleWiFiDirectInitializationFailure($"Failed to initialize WiFi Direct services: {ex.Message}", ex);
+                    }
                 }
             }
         }
-        
+
+        private static void HandleWiFiDirectInitializationFailure(string message, Exception exception)
+        {
+            _areWiFiDirectServicesAvailable = false;
+            _serviceInitializationError = message;
+            System.Diagnostics.Debug.WriteLine($"{message} {exception}");
+            DisposeWiFiDirectServices();
+        }
+
         /// <summary>
         /// Initializes ChatService, SpeedTestService, and FileTransferService.
         /// Called after WiFiDirectService is initialized.
@@ -179,11 +228,43 @@ namespace WDCableWUI.Services
             ChatService.ResetInstance();
             SpeedTestService.ResetInstance();
             FileTransferService.ResetInstance();
-            
+
             // Create new instances - these will automatically subscribe to ConnectionService events
             _chatService = ChatService.Instance;
             _speedTestService = SpeedTestService.Instance;
             _fileTransferService = FileTransferService.Instance;
+        }
+
+        private static void DisposeWiFiDirectServices()
+        {
+            try
+            {
+                _chatService?.Dispose();
+                _chatService = null;
+
+                _speedTestService?.Dispose();
+                _speedTestService = null;
+
+                _fileTransferService?.Dispose();
+                _fileTransferService = null;
+
+                ChatService.ResetInstance();
+                SpeedTestService.ResetInstance();
+                FileTransferService.ResetInstance();
+
+                _connectionService = null;
+                ConnectionService.ResetInstance();
+
+                _sessionManager = null;
+                SessionManager.ResetInstance();
+
+                _wifiDirectService?.Dispose();
+                _wifiDirectService = null;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error disposing WiFi Direct services: {ex.Message}");
+            }
         }
         
         /// <summary>
@@ -201,33 +282,14 @@ namespace WDCableWUI.Services
                 
                 try
                 {
-                    // Dispose ChatService, SpeedTestService, and FileTransferService first
-                    _chatService?.Dispose();
-                    _chatService = null;
-                    
-                    _speedTestService?.Dispose();
-                    _speedTestService = null;
-                    
-                    _fileTransferService?.Dispose();
-                    _fileTransferService = null;
-                    
-                    // Reset singleton instances
-                    ChatService.ResetInstance();
-                    SpeedTestService.ResetInstance();
-                    FileTransferService.ResetInstance();
-                    
-                    // Dispose and reset ConnectionService
-                    _connectionService = null;
-                    ConnectionService.ResetInstance();
-                    
-                    // Then dispose WiFiDirectService
-                    _wifiDirectService?.Dispose();
-                    _wifiDirectService = null;
+                    DisposeWiFiDirectServices();
                     
                     // Finally dispose DataManager
                     _dataManager = null;
                     DataManager.ResetInstance();
                     
+                    _serviceInitializationError = null;
+                    _areWiFiDirectServicesAvailable = false;
                     _isInitialized = false;
                 }
                 catch (Exception ex)

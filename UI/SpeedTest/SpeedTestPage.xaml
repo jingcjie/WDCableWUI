@@ -83,7 +83,8 @@
                             <TextBlock x:Name="ConnectionDetailsText"
                                       x:Uid="SpeedTest_Status_Description"
                                       Style="{StaticResource CaptionTextBlockStyle}"
-                                      Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                      Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                      TextWrapping="Wrap"/>
                         </StackPanel>
                         
                         <Button x:Name="RefreshConnectionButton"

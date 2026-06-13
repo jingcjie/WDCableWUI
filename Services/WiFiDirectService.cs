@@ -50,6 +50,16 @@ namespace WDCableWUI.Services
         public bool IsGroupOwner { get; private set; }
         public string? LocalIP { get; private set; }
         public string? RemoteIP { get; private set; }
+        public string RoleName => IsConnected ? (IsGroupOwner ? "Group Owner" : "Client") : "Not connected";
+        public string EndpointDiagnostics
+        {
+            get
+            {
+                var local = string.IsNullOrWhiteSpace(LocalIP) ? "unavailable" : LocalIP;
+                var remote = string.IsNullOrWhiteSpace(RemoteIP) ? "unavailable" : RemoteIP;
+                return $"Role: {RoleName}; Local endpoint: {local}; Remote endpoint: {remote}";
+            }
+        }
 
         
         public event EventHandler<WiFiDirectDevice>? DeviceDiscovered;
@@ -83,7 +93,13 @@ namespace WDCableWUI.Services
         {
             try
             {
-                if (IsAdvertising) return Task.FromResult(true);
+                if (IsAdvertising)
+                {
+                    OnStatusChanged("Advertising is already running");
+                    return Task.FromResult(true);
+                }
+
+                OnStatusChanged($"Starting WiFi Direct advertising as '{deviceName}'...");
 
                 _publisher = new WiFiDirectAdvertisementPublisher();
                 _publisher.Advertisement.ListenStateDiscoverability = WiFiDirectAdvertisementListenStateDiscoverability.Normal;
@@ -103,11 +119,12 @@ namespace WDCableWUI.Services
                 _publisher.Start();
                 IsAdvertising = true;
                 
-                OnStatusChanged("Device is now discoverable");
+                OnStatusChanged($"Advertising started. Device is discoverable as '{deviceName}'");
                 return Task.FromResult(true);
             }
             catch (Exception ex)
             {
+                CleanupAdvertisingResources();
                 OnErrorOccurred($"Failed to start advertising: {ex.Message}");
                 return Task.FromResult(false);
             }
@@ -117,15 +134,14 @@ namespace WDCableWUI.Services
         {
             try
             {
-                if (!IsAdvertising) return;
+                if (!IsAdvertising && _publisher == null && _connectionListener == null)
+                {
+                    return;
+                }
 
-                _publisher?.Stop();
-                // WiFiDirectConnectionListener doesn't have Dispose method
-                _publisher = null;
-                _connectionListener = null;
-                IsAdvertising = false;
+                CleanupAdvertisingResources();
                 
-                OnStatusChanged("Device is no longer discoverable");
+                OnStatusChanged("Advertising stopped. Device is no longer discoverable");
             }
             catch (Exception ex)
             {
@@ -133,11 +149,44 @@ namespace WDCableWUI.Services
             }
         }
 
+        private void CleanupAdvertisingResources()
+        {
+            if (_publisher != null)
+            {
+                _publisher.StatusChanged -= OnAdvertisementStatusChanged;
+                try
+                {
+                    _publisher.Stop();
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[WiFiDirectService] Ignoring publisher stop error: {ex.Message}");
+                }
+                _publisher = null;
+            }
+
+            if (_connectionListener != null)
+            {
+                _connectionListener.ConnectionRequested -= OnConnectionRequested;
+                _connectionListener = null;
+            }
+
+            IsAdvertising = false;
+        }
+
         public Task<bool> StartScanningAsync()
         {
             try
             {
-                if (IsScanning) return Task.FromResult(true);
+                if (IsScanning)
+                {
+                    OnStatusChanged("Scan is already running");
+                    return Task.FromResult(true);
+                }
+
+                ClearDiscoveredDevices();
+                OnStatusChanged("Starting WiFi Direct scan...");
+
                 var deviceSelector = Windows.Devices.WiFiDirect.WiFiDirectDevice.GetDeviceSelector(WiFiDirectDeviceSelectorType.AssociationEndpoint);
                 _deviceWatcher = DeviceInformation.CreateWatcher(deviceSelector);
                 
@@ -149,11 +198,12 @@ namespace WDCableWUI.Services
                 _deviceWatcher.Start();
                 IsScanning = true;
                 
-                OnStatusChanged("Scanning for WiFi Direct devices...");
+                OnStatusChanged("Scanning for WiFi Direct devices");
                 return Task.FromResult(true);
             }
             catch (Exception ex)
             {
+                CleanupDeviceWatcher(clearDevices: true);
                 OnErrorOccurred($"Failed to start scanning: {ex.Message}");
                 return Task.FromResult(false);
             }
@@ -163,19 +213,56 @@ namespace WDCableWUI.Services
         {
             try
             {
-                if (!IsScanning) return;
+                if (!IsScanning && _deviceWatcher == null)
+                {
+                    return;
+                }
 
-                _deviceWatcher?.Stop();
-                _deviceWatcher = null;
-                IsScanning = false;
-                
-                _dispatcherQueue.TryEnqueue(() => DiscoveredDevices.Clear());
-                OnStatusChanged("Stopped scanning");
+                CleanupDeviceWatcher(clearDevices: true);
+                OnStatusChanged("Scan stopped. Discovered device list cleared");
             }
             catch (Exception ex)
             {
                 OnErrorOccurred($"Error stopping scan: {ex.Message}");
             }
+        }
+
+        private void CleanupDeviceWatcher(bool clearDevices)
+        {
+            var watcher = _deviceWatcher;
+            if (watcher != null)
+            {
+                watcher.Added -= OnDeviceAdded;
+                watcher.Removed -= OnDeviceRemoved;
+                watcher.Updated -= OnDeviceUpdated;
+                watcher.EnumerationCompleted -= OnEnumerationCompleted;
+
+                try
+                {
+                    if (watcher.Status == DeviceWatcherStatus.Started ||
+                        watcher.Status == DeviceWatcherStatus.EnumerationCompleted)
+                    {
+                        watcher.Stop();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[WiFiDirectService] Ignoring watcher stop error: {ex.Message}");
+                }
+            }
+
+            _deviceWatcher = null;
+            IsScanning = false;
+
+            if (clearDevices)
+            {
+                ClearDiscoveredDevices();
+            }
+        }
+
+        private void ClearDiscoveredDevices()
+        {
+            _dispatcherQueue.TryEnqueue(() => DiscoveredDevices.Clear());
         }
 
         public async Task<bool> ConnectToDeviceAsync(WiFiDirectDevice device)
@@ -188,13 +275,18 @@ namespace WDCableWUI.Services
                     return false;
                 }
 
-                OnStatusChanged($"Connecting to {device.Name}...");
+                if (IsScanning)
+                {
+                    StopScanning();
+                }
+
+                OnStatusChanged($"Connecting to {device.Name} ({device.Id})...");
                 
                 
                 var wifiDirectDevice = await Windows.Devices.WiFiDirect.WiFiDirectDevice.FromIdAsync(device.Id);
                 if (wifiDirectDevice == null)
                 {
-                    // OnErrorOccurred("Failed to connect to WiFi Direct device");
+                    OnErrorOccurred($"Failed to create WiFi Direct device for {device.Name}");
                     return false;
                 }
 
@@ -212,7 +304,7 @@ namespace WDCableWUI.Services
                 // No need to create it here
                 
                 OnDeviceConnected(_connectedDevice);
-                OnStatusChanged($"Connected to {device.Name}");
+                OnStatusChanged($"Connected to {device.Name}. {EndpointDiagnostics}");
                 return true;
             }
             catch (Exception ex)
@@ -226,9 +318,13 @@ namespace WDCableWUI.Services
         {
             try
             {
-                if (_connectedDevice != null)
+                if (_connectedDevice != null || _wifiDirectDevice != null)
                 {
-                    _connectedDevice.IsConnected = false;
+                    var disconnectedDeviceName = _connectedDevice?.Name ?? "peer device";
+                    if (_connectedDevice != null)
+                    {
+                        _connectedDevice.IsConnected = false;
+                    }
                     _connectedDevice = null;
                     
                     if (_wifiDirectDevice != null)
@@ -241,9 +337,10 @@ namespace WDCableWUI.Services
                     IsGroupOwner = false;
                     LocalIP = null;
                     RemoteIP = null;
+                    ClearDiscoveredDevices();
                     
                     OnDeviceDisconnected();
-                    OnStatusChanged("Disconnected");
+                    OnStatusChanged($"Disconnected from {disconnectedDeviceName}");
                 }
             }
             catch (Exception ex)
@@ -259,11 +356,11 @@ namespace WDCableWUI.Services
             _dispatcherQueue.TryEnqueue(() => {
                 if (sender.ConnectionStatus == WiFiDirectConnectionStatus.Connected)
                 {
-                    OnStatusChanged("WiFi Direct connection established");
+                    OnStatusChanged($"WiFi Direct connection established. {EndpointDiagnostics}");
                 }
                 else if (sender.ConnectionStatus == WiFiDirectConnectionStatus.Disconnected)
                 {
-                    OnStatusChanged("WiFi Direct connection lost");
+                    OnStatusChanged("WiFi Direct connection lost. Cleaning up session");
                     _ = DisconnectAsync();
                 }
             });
@@ -286,14 +383,17 @@ namespace WDCableWUI.Services
                     RemoteIP = endpointPairs[0].RemoteHostName.ToString();
                     
                     System.Diagnostics.Debug.WriteLine($"[WiFiDirectService] LocalIP: {LocalIP}, RemoteIP: {RemoteIP}");
+                    OnStatusChanged($"Endpoint pair available. Local: {LocalIP}; Remote: {RemoteIP}");
                     
                     IsGroupOwner = DetermineGroupOwnerStatus(LocalIP, RemoteIP);
                     System.Diagnostics.Debug.WriteLine($"[WiFiDirectService] IsGroupOwner determined as: {IsGroupOwner}");
+                    OnStatusChanged($"Role inferred from endpoint IPs: {RoleName}. {EndpointDiagnostics}");
                 }
                 else
                 {
                     System.Diagnostics.Debug.WriteLine("[WiFiDirectService] No connection endpoints available");
                     OnErrorOccurred("Warning: No connection endpoints available for group owner detection");
+                    OnStatusChanged("Role could not be verified because no endpoint pairs were available");
                 }
             }
             catch (Exception ex)
@@ -316,6 +416,13 @@ namespace WDCableWUI.Services
                     !System.Net.IPAddress.TryParse(remoteIP, out var remoteAddress))
                 {
                     OnErrorOccurred($"Warning: Could not parse IP addresses - Local: {localIP}, Remote: {remoteIP}");
+                    return false;
+                }
+
+                if (localAddress.AddressFamily != System.Net.Sockets.AddressFamily.InterNetwork ||
+                    remoteAddress.AddressFamily != System.Net.Sockets.AddressFamily.InterNetwork)
+                {
+                    OnErrorOccurred($"Warning: Group owner inference expects IPv4 endpoints - Local: {localIP}, Remote: {remoteIP}");
                     return false;
                 }
 
@@ -357,7 +464,7 @@ namespace WDCableWUI.Services
                 request = args.GetConnectionRequest();
                 var deviceInfo = request.DeviceInformation;
                 
-                OnStatusChanged($"Connection request from {deviceInfo.Name}");
+                OnStatusChanged($"Connection request received from {deviceInfo.Name} ({deviceInfo.Id})");
                 
                 // Create device object for the request
                 var requestingDevice = new WiFiDirectDevice
@@ -387,12 +494,13 @@ namespace WDCableWUI.Services
                 else
                 {
                     // Timeout occurred
-                    OnStatusChanged($"Connection request from {deviceInfo.Name} timed out");
+                    OnStatusChanged($"Connection request from {deviceInfo.Name} timed out after 60 seconds");
                     connectionRequestArgs.ResponseTask.TrySetResult(false);
                 }
                 
                 if (userAccepted)
                 {
+                    OnStatusChanged($"Connection request accepted for {deviceInfo.Name}");
                     try
                     {
                         var wifiDirectDevice = await Windows.Devices.WiFiDirect.WiFiDirectDevice.FromIdAsync(deviceInfo.Id);
@@ -413,6 +521,11 @@ namespace WDCableWUI.Services
                 // No need to create it here
                             
                             _dispatcherQueue.TryEnqueue(() => OnDeviceConnected(requestingDevice));
+                            OnStatusChanged($"Accepted connection from {deviceInfo.Name}. {EndpointDiagnostics}");
+                        }
+                        else
+                        {
+                            OnErrorOccurred($"Failed to create WiFi Direct device for accepted request from {deviceInfo.Name}");
                         }
                     }
                     catch (Exception deviceEx)
@@ -422,7 +535,7 @@ namespace WDCableWUI.Services
                 }
                 else
                 {
-                    OnStatusChanged($"Connection request from {deviceInfo.Name} was declined");
+                    OnStatusChanged($"Connection request declined for {deviceInfo.Name}");
                 }
             }
             catch (Exception ex)
@@ -446,6 +559,16 @@ namespace WDCableWUI.Services
         private void OnDeviceAdded(DeviceWatcher sender, DeviceInformation deviceInfo)
         {
             _dispatcherQueue.TryEnqueue(() => {
+                var existingDevice = DiscoveredDevices.FirstOrDefault(d => d.Id == deviceInfo.Id);
+                if (existingDevice != null)
+                {
+                    existingDevice.Name = deviceInfo.Name ?? "Unknown Device";
+                    existingDevice.DeviceInfo = deviceInfo;
+                    existingDevice.Status = "Available";
+                    OnStatusChanged($"Discovered device refreshed: {existingDevice.Name}");
+                    return;
+                }
+
                 var device = new WiFiDirectDevice
                 {
                     Id = deviceInfo.Id,
@@ -456,6 +579,7 @@ namespace WDCableWUI.Services
                 };
                 
                 DiscoveredDevices.Add(device);
+                OnStatusChanged($"Discovered device: {device.Name} ({device.Id})");
                 OnDeviceDiscovered(device);
             });
         }
@@ -467,6 +591,7 @@ namespace WDCableWUI.Services
                 if (device != null)
                 {
                     DiscoveredDevices.Remove(device);
+                    OnStatusChanged($"Discovered device removed: {device.Name}");
                 }
             });
         }
@@ -479,6 +604,7 @@ namespace WDCableWUI.Services
                 {
                     // Update device properties if needed
                     device.Status = "Updated";
+                    OnStatusChanged($"Discovered device updated: {device.Name}");
                 }
             });
         }
@@ -486,7 +612,7 @@ namespace WDCableWUI.Services
         private void OnEnumerationCompleted(DeviceWatcher sender, object args)
         {
             _dispatcherQueue.TryEnqueue(() => {
-                OnStatusChanged($"Found {DiscoveredDevices.Count} devices");
+                OnStatusChanged($"Scan enumeration completed. Found {DiscoveredDevices.Count} device(s)");
             });
         }
 
@@ -513,11 +639,13 @@ namespace WDCableWUI.Services
 
         protected virtual void OnStatusChanged(string status)
         {
+            Debug.WriteLine($"[WiFiDirectService] {status}");
             StatusChanged?.Invoke(this, status);
         }
 
         protected virtual void OnErrorOccurred(string error)
         {
+            Debug.WriteLine($"[WiFiDirectService][Error] {error}");
             ErrorOccurred?.Invoke(this, error);
         }
         

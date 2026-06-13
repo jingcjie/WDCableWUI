@@ -1,6 +1,6 @@
 # Windows TODO - Transport Rewrite
 
-Last updated: 2026-06-12
+Last updated: 2026-06-13
 
 This file is self-contained. An agent working only inside `WDCableWUI/` should be able to read this file and understand the product direction, current code shape, and next implementation milestones.
 
@@ -134,9 +134,9 @@ No manual device test required.
 
 Codex work:
 
-- [ ] Read the current protocol in `ConnectionService.cs`, `ChatService.cs`, `SpeedTestService.cs`, and `FileTransferService.cs`.
-- [ ] Create or update shared `../PROTOCOL.md` if missing.
-- [ ] Define Windows constants matching the shared spec:
+- [x] Read the current protocol in `ConnectionService.cs`, `ChatService.cs`, `SpeedTestService.cs`, and `FileTransferService.cs`.
+- [x] Create or update shared `../PROTOCOL.md` if missing.
+- [x] Define Windows constants matching the shared spec:
   - magic
   - protocol version
   - frame header size
@@ -145,13 +145,13 @@ Codex work:
   - channel names: `control`, `bulk`, and optional no-op `realtime` only if Android compatibility requires it
   - frame type names/ids
   - capability strings: `control.chat`, `bulk.file`, `bulk.speed`, `diagnostics.export`; no new realtime/audio feature capability
-- [ ] Add C# protocol classes in a focused namespace, for example:
+- [x] Add C# protocol classes in a focused namespace, for example:
   - `ProtocolFrame`
   - `ProtocolFrameType`
   - `ProtocolChannel`
   - `ProtocolError`
   - `ProtocolCodec`
-- [ ] Implement binary frame encode/decode:
+- [x] Implement binary frame encode/decode:
   - fixed magic/version
   - frame type
   - flags
@@ -162,13 +162,13 @@ Codex work:
   - payload length
   - UTF-8 JSON metadata
   - payload bytes
-- [ ] Enforce maximum metadata and payload sizes.
-- [ ] Reject malformed magic/version and invalid lengths with typed protocol errors.
-- [ ] Add a test project if one does not exist.
-- [ ] Add tests for valid frames, partial reads, malformed headers, oversized metadata, oversized payload, zero-length payload, and JSON metadata round trip.
-- [ ] Do not wire new code into live feature flows yet unless the touched feature is fully replaced in the same milestone.
-- [ ] Run `dotnet build WDCableWUI.sln`.
-- [ ] Run tests if available.
+- [x] Enforce maximum metadata and payload sizes.
+- [x] Reject malformed magic/version and invalid lengths with typed protocol errors.
+- [x] Add a test project if one does not exist.
+- [x] Add tests for valid frames, partial reads, malformed headers, oversized metadata, oversized payload, zero-length payload, and JSON metadata round trip.
+- [x] Do not wire new code into live feature flows yet unless the touched feature is fully replaced in the same milestone.
+- [x] Run `dotnet build WDCableWUI.sln`.
+- [x] Run tests if available.
 
 Done means:
 
@@ -184,7 +184,7 @@ No manual device test required unless the agent has both peer builds available. 
 
 Codex work:
 
-- [ ] Add a Windows `SessionManager` or equivalent single owner for:
+- [x] Add a Windows `SessionManager` or equivalent single owner for:
   - current session id
   - peer info
   - role
@@ -195,15 +195,15 @@ Codex work:
   - heartbeat
   - teardown
   - disconnect reason
-- [ ] Add a transport abstraction so raw sockets are hidden behind:
+- [x] Add a transport abstraction so raw sockets are hidden behind:
   - connect
   - accept
   - read frame
   - write frame
   - close
   - cancel
-- [ ] Route post-link setup from `WiFiDirectService.cs` to the session manager.
-- [ ] Implement connection phases:
+- [x] Route post-link setup from `WiFiDirectService.cs` to the session manager.
+- [x] Implement connection phases:
   - `WifiDirectConnected`
   - `ConnectingTransport`
   - `Handshaking`
@@ -212,17 +212,17 @@ Codex work:
   - `Disconnecting`
   - `Disconnected`
   - `Failed`
-- [ ] Implement handshake with app id, protocol min/max, platform, app version, device name, role, session id, capabilities, and port/channel map. Advertise chat/file/speed/diagnostics; do not advertise realtime/audio as a feature.
-- [ ] Implement heartbeat and timeout.
-- [ ] Make cleanup idempotent.
-- [ ] Treat duplicate/stale Wi-Fi Direct connection callbacks for the same peer/role as idempotent; do not tear down a healthy session just because Windows reports the same link again.
-- [ ] Ensure all long-running reads/writes stop during disconnect, app shutdown, or session replacement.
-- [ ] Add events for session state, session ready, session failed, peer not running app, and disconnect reason.
-- [ ] Start replacing `ConnectionService` responsibilities with the session manager. Do not leave duplicate raw socket lifecycle owners.
-- [ ] Remove blocking `.Wait(...)` patterns from any new transport/session path.
-- [ ] Add focused tests for state transitions where practical.
-- [ ] Run `dotnet build WDCableWUI.sln`.
-- [ ] Run tests if available.
+- [x] Implement handshake with app id, protocol min/max, platform, app version, device name, role, session id, capabilities, and port/channel map. Advertise chat/file/speed/diagnostics; do not advertise realtime/audio as a feature.
+- [x] Implement heartbeat and timeout.
+- [x] Make cleanup idempotent.
+- [x] Treat duplicate/stale Wi-Fi Direct connection callbacks for the same peer/role as idempotent; do not tear down a healthy session just because Windows reports the same link again.
+- [x] Ensure all long-running reads/writes stop during disconnect, app shutdown, or session replacement.
+- [x] Add events for session state, session ready, session failed, peer not running app, and disconnect reason.
+- [x] Start replacing `ConnectionService` responsibilities with the session manager. Do not leave duplicate raw socket lifecycle owners.
+- [x] Remove blocking `.Wait(...)` patterns from any new transport/session path.
+- [x] Add focused tests for state transitions where practical.
+- [x] Run `dotnet build WDCableWUI.sln`.
+- [x] Run tests if available.
 
 Done means:
 
@@ -238,24 +238,24 @@ Manual test gate only after matching Android support exists, or when testing Win
 
 Codex work:
 
-- [ ] Add shared app/session state model for Windows UI.
-- [ ] Update `MainWindow` and feature pages so controls are enabled only after `Ready`.
-- [ ] Keep Wi-Fi Direct "connected" separate from app "ready".
-- [ ] Replace chat send/receive with `control` frames.
-- [ ] Include message id, timestamp, sender platform, and session id in chat metadata.
-- [ ] Add chat send result/failure handling instead of assuming optimistic send success.
-- [ ] Preserve message ordering per session.
-- [ ] Show a clear error when the peer is connected by Wi-Fi Direct but not running the upgraded WDCable protocol.
-- [ ] Delete the old chat socket path from the live app flow.
-- [ ] Add tests for ready/fail/chat event handling where practical.
-- [ ] Run `dotnet build WDCableWUI.sln`.
-- [ ] Run tests if available.
+- [x] Add shared app/session state model for Windows UI.
+- [x] Update `MainWindow` and feature pages so controls are enabled only after `Ready`.
+- [x] Keep Wi-Fi Direct "connected" separate from app "ready".
+- [x] Replace chat send/receive with `control` frames.
+- [x] Include message id, timestamp, sender platform, and session id in chat metadata.
+- [x] Add chat send result/failure handling instead of assuming optimistic send success.
+- [x] Preserve message ordering per session.
+- [x] Show a clear error when the peer is connected by Wi-Fi Direct but not running the upgraded WDCable protocol.
+- [x] Delete the old chat socket path from the live app flow.
+- [x] Add tests for ready/fail/chat event handling where practical.
+- [x] Run `dotnet build WDCableWUI.sln`.
+- [x] Run tests if available.
 
 Manual test gate:
 
-- [ ] Windows-to-Windows or Windows-to-Android reaches `Ready`.
-- [ ] Send 10 chat messages each direction.
-- [ ] Disconnect and reconnect 5 times.
+- [x] Windows-to-Windows or Windows-to-Android reaches `Ready`.
+- [x] Send 10 chat messages each direction.
+- [x] Disconnect and reconnect 5 times.
 - [ ] Connect to a peer that has Wi-Fi Direct but not the upgraded WDCable protocol and confirm clear failure.
 
 Done means:
@@ -271,7 +271,7 @@ Manual test gate only after matching peer support exists.
 
 Codex work:
 
-- [ ] Implement reliable bulk stream API:
+- [x] Implement reliable bulk stream API:
   - open stream
   - send metadata
   - send chunks
@@ -279,7 +279,7 @@ Codex work:
   - cancel
   - error
   - close
-- [ ] Replace Windows file send/receive:
+- [x] Replace Windows file send/receive:
   - transfer id
   - safe file name metadata
   - zero-byte file support
@@ -287,7 +287,7 @@ Codex work:
   - download path validation/fallback
   - partial-file cleanup
   - SHA-256 hash on complete when practical
-- [ ] Replace Windows speed test:
+- [x] Replace Windows speed test:
   - test id
   - `speed-request` download request metadata
   - `speed-data` payload metadata
@@ -295,59 +295,37 @@ Codex work:
   - cancel
   - failure result
   - no concurrent tests on the same session unless explicitly supported
-- [ ] Match Android bulk behavior:
+- [x] Match Android bulk behavior:
   - `kind=file` for file streams
   - `kind=speed-request` for download requests
   - `kind=speed-data` for generated speed payload streams
   - unknown file size is `-1`
   - duplicate filenames are saved safely
   - completion is determined by `bulk.complete`; completion ack is diagnostic/best-effort, not required for sender success
-- [ ] Remove delimiter-sensitive `FILE:name:size` parsing from the live path.
-- [ ] Remove `SPEED_TEST_*` string headers from the live path.
-- [ ] Update Windows transfer/speed UI from protocol progress events.
-- [ ] Ensure `FileTransferPage` shows determinate progress.
-- [ ] Run `dotnet build WDCableWUI.sln`.
-- [ ] Run tests if available.
+- [x] Remove delimiter-sensitive `FILE:name:size` parsing from the live path.
+- [x] Remove `SPEED_TEST_*` string headers from the live path.
+- [x] Update Windows transfer/speed UI from protocol progress events.
+- [x] Ensure `FileTransferPage` shows determinate progress.
+- [x] Run `dotnet build WDCableWUI.sln`.
+- [x] Run tests if available.
 
 Manual test gate:
 
-- [ ] Transfer a small text file.
-- [ ] Transfer a duplicate filename twice.
-- [ ] Transfer a zero-byte file if available.
-- [ ] Change download location to a valid folder and receive a file.
-- [ ] Try an invalid/missing download path and verify graceful fallback.
-- [ ] Interrupt transfer by closing peer app or disabling Wi-Fi.
-- [ ] Run upload and download speed tests 5 times.
-- [ ] Disconnect during speed test and reconnect.
+- [x] Transfer a small text file.
+- [x] Transfer a duplicate filename twice.
+- [x] Transfer a zero-byte file if available.
+- [x] Change download location to a valid folder and receive a file.
+- [x] Try an invalid/missing download path and verify graceful fallback.
+- [x] Interrupt transfer by closing peer app or disabling Wi-Fi.
+- [x] Run upload and download speed tests 5 times.
+- [x] Disconnect during speed test and reconnect.
 
 Done means:
 
 - File and speed no longer depend on feature-owned sockets.
 - Interrupted transfers/tests fail cleanly and do not corrupt the next operation.
 
-## W-E - Dropped Streaming Scope
-
-Goal: keep streaming out of the Windows implementation for this phase.
-
-No manual device test required.
-
-Codex work:
-
-- [ ] Do not implement microphone capture, audio playback, realtime media frames, jitter buffers, sender pacing, streaming controls, or media permissions.
-- [ ] If current Android interop requires a `realtime` transport during session setup, implement only no-op open/close handling in the session runtime.
-- [ ] Do not advertise `realtime.audio` as a supported Windows feature.
-- [ ] Update `../PROTOCOL.md` when the team decides whether to remove Android realtime scaffolding or keep it temporarily as reserved compatibility.
-
-Manual test gate:
-
-- [ ] None. Streaming is out of scope.
-
-Done means:
-
-- Windows has no streaming feature implementation.
-- Any realtime code that exists is clearly marked reserved/no-op compatibility and is not reachable from UI as a media feature.
-
-## W-F - Windows Diagnostics And Release Gate
+## W-E - Windows Diagnostics And Release Gate
 
 Goal: make Windows diagnosable and ready for cross-device beta/store validation.
 

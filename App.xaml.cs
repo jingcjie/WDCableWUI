@@ -37,13 +37,18 @@ namespace WDCableWUI
             try
             {
                 ServiceManager.Initialize();
+                if (!ServiceManager.AreWiFiDirectServicesAvailable)
+                {
+                    _serviceInitializationFailed = true;
+                    _serviceInitializationError = ServiceManager.ServiceUnavailableMessage;
+                }
             }
             catch (NotSupportedException ex)
             {
                 // WiFi Direct not supported - show user-friendly message
                 System.Diagnostics.Debug.WriteLine($"WiFi Direct not supported: {ex.Message}");
                 _serviceInitializationFailed = true;
-                _serviceInitializationError = "WiFi Direct is not supported in this system, the windows version can be too low or no wireless card is installed correctly";
+                _serviceInitializationError = ex.Message;
                 // Log the error but continue app startup
                 // Services will be null but the app should still function
             }
@@ -52,7 +57,7 @@ namespace WDCableWUI
                 // Handle other initialization errors gracefully - don't crash the app
                 System.Diagnostics.Debug.WriteLine($"Failed to initialize ServiceManager: {ex.Message}");
                 _serviceInitializationFailed = true;
-                _serviceInitializationError = "WiFi Direct is not supported in this system, the windows version can be too low or no wireless card is installed correctly";
+                _serviceInitializationError = $"WiFi Direct services could not be initialized: {ex.Message}";
                 // Log the error but continue app startup
                 // Services will be null but the app should still function
             }
@@ -170,8 +175,8 @@ namespace WDCableWUI
             
             var dialog = new ContentDialog()
              {
-                 Title = "WiFi Direct Not Supported",
-                 Content = "WiFi Direct is not supported in this system, the windows version can be too low or no wireless card is installed correctly.",
+                 Title = "WiFi Direct Unavailable",
+                 Content = $"{_serviceInitializationError}\n\nYou can still open pages and change Settings. Connection, chat, speed test, and file transfer features will remain disabled until WiFi Direct is available.",
                  CloseButtonText = "OK",
                  XamlRoot = _window?.Content.XamlRoot
              };

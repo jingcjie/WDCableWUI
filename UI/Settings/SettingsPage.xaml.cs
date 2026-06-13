@@ -24,7 +24,7 @@ namespace WDCableWUI.UI.Settings
         {
             try
             {
-                _dataManager = ServiceManager.IsInitialized ? ServiceManager.DataManager : null;
+                _dataManager = ServiceManager.DataManager;
             }
             catch (Exception ex)
             {

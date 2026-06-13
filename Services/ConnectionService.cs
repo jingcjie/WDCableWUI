@@ -1,384 +1,190 @@
 using System;
-using System.Collections.Generic;
-using System.Net;
 using System.Net.Sockets;
-using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.UI.Dispatching;
 
 namespace WDCableWUI.Services
 {
-    public class ConnectionService
+    /// <summary>
+    /// Compatibility facade for older pages while SessionManager owns all transport lifecycle.
+    /// Feature services should migrate to SessionManager APIs instead of using socket properties.
+    /// </summary>
+    public class ConnectionService : IDisposable
     {
         private static ConnectionService? _instance;
-        private static readonly object _lock = new object();
-        
-        private WiFiDirectService? _wifiDirectService;
-        private readonly DispatcherQueue _dispatcherQueue;
-        
-        // TCP connections
-        private TcpListener? _chatServer;
-        private TcpListener? _speedTestServer;
-        private TcpListener? _fileServer;
-        
-        private TcpClient? _chatClient;
-        private TcpClient? _speedTestClient;
-        private TcpClient? _fileClient;
-        
-        // Connection status
-        private bool _isInitialized;
-        private CancellationTokenSource? _cancellationTokenSource;
-        private bool _chatConnected;
-        private bool _speedTestConnected;
-        private bool _fileConnected;
-        private readonly object _connectionLock = new object();
-        
-        // Port definitions
-        private const int CHAT_PORT = 8888;
-        private const int SPEED_TEST_PORT = 8889;
-        private const int FILE_PORT = 8890;
-        
-        // Events
-        public event EventHandler<string>? StatusChanged;
-        public event EventHandler<string>? ErrorOccurred;
-        public event EventHandler? ConnectionsEstablished;
-        public event EventHandler? OtherSideNotRunningApp;
-        
-        // Properties
-        public bool IsInitialized => _isInitialized;
-        public bool IsGroupOwner => _wifiDirectService?.IsGroupOwner ?? false;
-        public bool IsConnected => _wifiDirectService?.IsConnected ?? false;
-        public TcpClient? ChatConnection => _chatClient;
-        public TcpClient? SpeedTestConnection => _speedTestClient;
-        public TcpClient? FileConnection => _fileClient;
-        
-        /// <summary>
-        /// Checks if all TCP connections (Chat, SpeedTest, and File) are healthy and connected.
-        /// </summary>
-        /// <returns>True if all connections are established and connected, false otherwise.</returns>
-        public bool IsConnectionHealthy()
-        {
-            lock (_connectionLock)
-            {
-                // Check if all connections exist and are still connected
-                bool chatHealthy = _chatClient != null && _chatClient.Connected;
-                bool speedTestHealthy = _speedTestClient != null && _speedTestClient.Connected;
-                bool fileHealthy = _fileClient != null && _fileClient.Connected;
-                
-                return chatHealthy && speedTestHealthy && fileHealthy;
-            }
-        }
-        
+        private static readonly object Lock = new();
+
+        private readonly DispatcherQueue? _dispatcherQueue;
+        private SessionManager? _sessionManager;
+        private bool _isDisposed;
+
         private ConnectionService()
         {
             _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
-            _cancellationTokenSource = new CancellationTokenSource();
         }
-        
+
         public static ConnectionService Instance
         {
             get
             {
                 if (_instance == null)
                 {
-                    lock (_lock)
+                    lock (Lock)
                     {
-                        if (_instance == null)
-                        {
-                            _instance = new ConnectionService();
-                        }
+                        _instance ??= new ConnectionService();
                     }
                 }
+
                 return _instance;
             }
         }
-        
+
         public static void ResetInstance()
         {
-            lock (_lock)
+            lock (Lock)
             {
                 _instance?.Dispose();
                 _instance = null;
             }
         }
-        
+
+        public event EventHandler<string>? StatusChanged;
+        public event EventHandler<string>? ErrorOccurred;
+        public event EventHandler? ConnectionsEstablished;
+        public event EventHandler? OtherSideNotRunningApp;
+
+        public bool IsInitialized => _sessionManager != null;
+
+        public bool IsGroupOwner => _sessionManager?.CurrentRole == SessionRole.GroupOwner;
+
+        public bool IsConnected => _sessionManager?.IsReady ?? false;
+
+        public TcpClient? ChatConnection => null;
+
+        public TcpClient? SpeedTestConnection => null;
+
+        public TcpClient? FileConnection => null;
+
         public void Initialize(WiFiDirectService wifiDirectService)
         {
-            if (_wifiDirectService != null)
-            {
-                // Unsubscribe from previous service
-                _wifiDirectService.DeviceConnected -= OnWiFiDirectConnected;
-                _wifiDirectService.DeviceDisconnected -= OnWiFiDirectDisconnected;
-            }
-            
-            _wifiDirectService = wifiDirectService ?? throw new ArgumentNullException(nameof(wifiDirectService));
-            
-            // Subscribe to WiFi Direct events
-            _wifiDirectService.DeviceConnected += OnWiFiDirectConnected;
-            _wifiDirectService.DeviceDisconnected += OnWiFiDirectDisconnected;
+            Initialize(wifiDirectService, ServiceManager.SessionManager ?? WDCableWUI.Services.SessionManager.Instance);
         }
-        
-        private async void OnWiFiDirectConnected(object? sender, WiFiDirectDevice device)
+
+        public void Initialize(WiFiDirectService wifiDirectService, SessionManager sessionManager)
         {
-            try
+            ArgumentNullException.ThrowIfNull(wifiDirectService);
+            ArgumentNullException.ThrowIfNull(sessionManager);
+
+            if (_sessionManager != null)
             {
-                OnStatusChanged("WiFi Direct connected. Initializing TCP connections...");
-                await InitializeConnectionsAsync();
-                
-                // Wait 6 seconds and check if connection is healthy
-                await Task.Delay(6000);
-                if (!IsConnectionHealthy())
-                {
-                    OnStatusChanged("Connection health check failed - other side may not be running this app");
-                    OnOtherSideNotRunningApp();
-                }
-            }
-            catch (Exception ex)
-            {
-                OnErrorOccurred($"Failed to initialize connections: {ex.Message}");
-            }
-        }
-        
-        private void OnWiFiDirectDisconnected(object? sender, EventArgs e)
-        {
-            OnStatusChanged("WiFi Direct disconnected. Cleaning up connections...");
-            CleanupConnections();
-        }
-        
-        public async Task InitializeConnectionsAsync()
-        {
-            if (_isInitialized)
-            {
-                OnStatusChanged("Connections already initialized.");
-                return;
-            }
-            
-            if (_wifiDirectService == null || !_wifiDirectService.IsConnected)
-            {
-                throw new InvalidOperationException("WiFi Direct must be connected before initializing TCP connections.");
-            }
-            
-            try
-            {
-                _cancellationTokenSource = new CancellationTokenSource();
-                
-                if (_wifiDirectService?.IsGroupOwner == true)
-                {
-                    OnStatusChanged("Device is Group Owner. Starting TCP servers...");
-                    await StartServersAsync();
-                    // For Group Owner, ConnectionsEstablished will be fired when all clients connect
-                }
-                else
-                {
-                    OnStatusChanged("Device is Client. Connecting to TCP servers...");
-                    await ConnectToServersAsync();
-                    // For Client, all connections are established immediately
-                    OnStatusChanged("All TCP connections established - Services are now available");
-                    ConnectionsEstablished?.Invoke(this, EventArgs.Empty);
-                }
-                
-                _isInitialized = true;
-            }
-            catch (Exception ex)
-            {
-                OnErrorOccurred($"Failed to initialize connections: {ex.Message}");
-                CleanupConnections();
-                throw;
-            }
-        }
-        
-        private Task StartServersAsync()
-        {
-            if (string.IsNullOrEmpty(_wifiDirectService?.LocalIP))
-            {
-                throw new InvalidOperationException("Local IP is not available");
+                UnsubscribeFromSession(_sessionManager);
             }
 
-            var localEndPoint = new IPEndPoint(IPAddress.Parse(_wifiDirectService.LocalIP), 0);
-
-            // Start Chat Server
-            _chatServer = new TcpListener(localEndPoint.Address, CHAT_PORT);
-            _chatServer.Start();
-            OnStatusChanged($"Chat server started on {localEndPoint.Address}:{CHAT_PORT}");
-
-            // Start Speed Test Server
-            _speedTestServer = new TcpListener(localEndPoint.Address, SPEED_TEST_PORT);
-            _speedTestServer.Start();
-            OnStatusChanged($"Speed test server started on {localEndPoint.Address}:{SPEED_TEST_PORT}");
-
-            // Start File Server
-            _fileServer = new TcpListener(localEndPoint.Address, FILE_PORT);
-            _fileServer.Start();
-            OnStatusChanged($"File server started on {localEndPoint.Address}:{FILE_PORT}");
-
-            // Accept connections asynchronously
-            var token = _cancellationTokenSource?.Token ?? CancellationToken.None;
-            _ = Task.Run(() => AcceptConnectionsAsync(_chatServer, "Chat", (client) => _chatClient = client), token);
-            _ = Task.Run(() => AcceptConnectionsAsync(_speedTestServer, "SpeedTest", (client) => _speedTestClient = client), token);
-            _ = Task.Run(() => AcceptConnectionsAsync(_fileServer, "File", (client) => _fileClient = client), token);
-
-            return Task.CompletedTask;
+            _sessionManager = sessionManager;
+            SubscribeToSession(_sessionManager);
         }
-        
-        private async Task AcceptConnectionsAsync(TcpListener server, string serviceName, Action<TcpClient> setClient)
+
+        public bool IsConnectionHealthy()
         {
-            try
-            {
-                while (!(_cancellationTokenSource?.Token.IsCancellationRequested ?? true))
-                {
-                    OnStatusChanged($"Waiting for {serviceName} client connection...");
-                    var client = await server.AcceptTcpClientAsync();
-                    
-                    if (client != null)
-                    {
-                        setClient(client);
-                        OnStatusChanged($"{serviceName} client connected from {client.Client.RemoteEndPoint}");
-                        
-                        // Mark this service as connected and check if all are ready
-                        lock (_connectionLock)
-                        {
-                            if (serviceName == "Chat") _chatConnected = true;
-                            else if (serviceName == "SpeedTest") _speedTestConnected = true;
-                            else if (serviceName == "File") _fileConnected = true;
-                            
-                            if (_chatConnected && _speedTestConnected && _fileConnected)
-                            {
-                                OnStatusChanged("All TCP connections established - Services are now available");
-                                ConnectionsEstablished?.Invoke(this, EventArgs.Empty);
-                            }
-                        }
-                    }
-                }
-            }
-            catch (ObjectDisposedException)
-            {
-                // Server was stopped, this is expected
-            }
-            catch (Exception ex)
-            {
-                OnErrorOccurred($"Error accepting {serviceName} connections: {ex.Message}");
-            }
+            return _sessionManager?.IsReady ?? false;
         }
-        
-        private async Task ConnectToServersAsync()
+
+        public Task InitializeConnectionsAsync()
         {
-            var remoteIP = _wifiDirectService?.RemoteIP;
-            if (string.IsNullOrEmpty(remoteIP))
-            {
-                throw new InvalidOperationException("Remote IP is not available for connection");
-            }
-            
-            var maxRetries = 3;
-            var retryDelay = TimeSpan.FromSeconds(2);
-            
-            // Connect to Chat Server
-            _chatClient = await ConnectWithRetryAsync(remoteIP, CHAT_PORT, "Chat", maxRetries, retryDelay);
-            
-            // Connect to Speed Test Server
-            _speedTestClient = await ConnectWithRetryAsync(remoteIP, SPEED_TEST_PORT, "SpeedTest", maxRetries, retryDelay);
-            
-            // Connect to File Server
-            _fileClient = await ConnectWithRetryAsync(remoteIP, FILE_PORT, "File", maxRetries, retryDelay);
-            
+            return _sessionManager?.StartFromCurrentWiFiDirectLinkAsync() ?? Task.CompletedTask;
         }
-        
-        private async Task<TcpClient?> ConnectWithRetryAsync(string remoteIP, int port, string serviceName, int maxRetries, TimeSpan retryDelay)
-        {
-            for (int attempt = 1; attempt <= maxRetries; attempt++)
-            {
-                try
-                {
-                    OnStatusChanged($"Connecting to {serviceName} server at {remoteIP}:{port} (attempt {attempt}/{maxRetries})...");
-                    
-                    var client = new TcpClient();
-                    await client.ConnectAsync(remoteIP, port);
-                    
-                    OnStatusChanged($"Successfully connected to {serviceName} server.");
-                    return client;
-                }
-                catch (Exception ex)
-                {
-                    if (attempt < maxRetries)
-                    {
-                        OnStatusChanged($"Connection to {serviceName} failed, retrying in {retryDelay.TotalSeconds} seconds...");
-                        await Task.Delay(retryDelay, _cancellationTokenSource?.Token ?? CancellationToken.None);
-                    }
-                    else
-                    {
-                        throw new Exception($"Failed to connect to {serviceName} server after {maxRetries} attempts: {ex.Message}");
-                    }
-                }
-            }
-            
-            return null; // Should never reach here
-        }
-        
+
         public void CleanupConnections()
         {
-            try
+            if (_sessionManager != null)
             {
-                _cancellationTokenSource?.Cancel();
-                
-                // Close client connections
-                _chatClient?.Close();
-                _speedTestClient?.Close();
-                _fileClient?.Close();
-                
-                _chatClient = null;
-                _speedTestClient = null;
-                _fileClient = null;
-                
-                // Reset connection tracking
-                lock (_connectionLock)
-                {
-                    _chatConnected = false;
-                    _speedTestConnected = false;
-                    _fileConnected = false;
-                }
-                
-                // Stop servers
-                _chatServer?.Stop();
-                _speedTestServer?.Stop();
-                _fileServer?.Stop();
-                
-                _chatServer = null;
-                _speedTestServer = null;
-                _fileServer = null;
-                
-                _isInitialized = false;
-                OnStatusChanged("All connections cleaned up.");
-            }
-            catch (Exception ex)
-            {
-                OnErrorOccurred($"Error during cleanup: {ex.Message}");
+                _ = _sessionManager.DisconnectAsync("connection_service_cleanup");
             }
         }
-        
+
         public void Dispose()
         {
-            CleanupConnections();
-            _cancellationTokenSource?.Dispose();
-            
-            if (_wifiDirectService != null)
+            if (_isDisposed)
             {
-                _wifiDirectService.DeviceConnected -= OnWiFiDirectConnected;
-                _wifiDirectService.DeviceDisconnected -= OnWiFiDirectDisconnected;
+                return;
+            }
+
+            _isDisposed = true;
+            if (_sessionManager != null)
+            {
+                UnsubscribeFromSession(_sessionManager);
+                _sessionManager = null;
             }
         }
-        
+
+        private void SubscribeToSession(SessionManager sessionManager)
+        {
+            sessionManager.StatusChanged += OnSessionStatusChanged;
+            sessionManager.ErrorOccurred += OnSessionErrorOccurred;
+            sessionManager.SessionReady += OnSessionReady;
+            sessionManager.PeerProtocolMissing += OnPeerProtocolMissing;
+        }
+
+        private void UnsubscribeFromSession(SessionManager sessionManager)
+        {
+            sessionManager.StatusChanged -= OnSessionStatusChanged;
+            sessionManager.ErrorOccurred -= OnSessionErrorOccurred;
+            sessionManager.SessionReady -= OnSessionReady;
+            sessionManager.PeerProtocolMissing -= OnPeerProtocolMissing;
+        }
+
+        private void OnSessionStatusChanged(object? sender, string status)
+        {
+            OnStatusChanged(status);
+        }
+
+        private void OnSessionErrorOccurred(object? sender, string error)
+        {
+            OnErrorOccurred(error);
+        }
+
+        private void OnSessionReady(object? sender, SessionReadyEventArgs e)
+        {
+            OnStatusChanged("WDCable session ready - Services are now available");
+            OnConnectionsEstablished();
+        }
+
+        private void OnPeerProtocolMissing(object? sender, SessionFailedEventArgs e)
+        {
+            OnStatusChanged("Peer is connected by WiFi Direct but is not running the upgraded WDCable protocol");
+            OnOtherSideNotRunningApp();
+        }
+
         private void OnStatusChanged(string status)
         {
-            _dispatcherQueue?.TryEnqueue(() => StatusChanged?.Invoke(this, status));
+            RaiseOnDispatcher(() => StatusChanged?.Invoke(this, status));
         }
-        
+
         private void OnErrorOccurred(string error)
         {
-            _dispatcherQueue?.TryEnqueue(() => ErrorOccurred?.Invoke(this, error));
+            RaiseOnDispatcher(() => ErrorOccurred?.Invoke(this, error));
         }
-        
+
+        private void OnConnectionsEstablished()
+        {
+            RaiseOnDispatcher(() => ConnectionsEstablished?.Invoke(this, EventArgs.Empty));
+        }
+
         private void OnOtherSideNotRunningApp()
         {
-            _dispatcherQueue?.TryEnqueue(() => OtherSideNotRunningApp?.Invoke(this, EventArgs.Empty));
+            RaiseOnDispatcher(() => OtherSideNotRunningApp?.Invoke(this, EventArgs.Empty));
+        }
+
+        private void RaiseOnDispatcher(Action action)
+        {
+            if (_dispatcherQueue != null)
+            {
+                _dispatcherQueue.TryEnqueue(() => action());
+            }
+            else
+            {
+                action();
+            }
         }
     }
 }

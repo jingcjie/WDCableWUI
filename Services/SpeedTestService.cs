@@ -1,360 +1,106 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
-using System.Net.Sockets;
-using System.Text;
+using System.Linq;
+using System.Text.Json;
 using System.Threading;
+using System.Threading.Channels;
 using System.Threading.Tasks;
 using Microsoft.UI.Dispatching;
+using WDCableWUI.Protocol;
 
 namespace WDCableWUI.Services
 {
-    /// <summary>
-    /// Singleton service for managing speed test functionality.
-    /// Provides access to the current speed test connection through the WiFiDirectService.
-    /// </summary>
     public class SpeedTestService : IDisposable
     {
         private static SpeedTestService? _instance;
-        private static readonly object _lock = new object();
-        private readonly DispatcherQueue _dispatcherQueue;
-        private bool _isDisposed = false;
-        private bool _isDownloadTestInProgress = false;
-        private long _expectedDownloadSize = 0;
-        private CancellationTokenSource? _listenerCancellationTokenSource;
-        private Task? _listenerTask;
-        
-        // Events
+        private static readonly object Lock = new();
+        private static readonly TimeSpan SpeedTestTimeout = TimeSpan.FromSeconds(60);
+
+        private readonly DispatcherQueue? _dispatcherQueue;
+        private readonly ConcurrentDictionary<long, IncomingSpeedStream> _incomingSpeedStreams = new();
+        private readonly ConcurrentDictionary<string, TaskCompletionSource<SpeedTestResult>> _pendingDownloads = new();
+        private readonly Channel<ProtocolFrame> _bulkFrames;
+        private readonly CancellationTokenSource _bulkFrameCancellationTokenSource = new();
+        private readonly SemaphoreSlim _speedTestLock = new(1, 1);
+        private SessionManager? _sessionManager;
+        private bool _isDisposed;
+        private string? _activeDownloadTestId;
+
         public event EventHandler<string>? StatusChanged;
         public event EventHandler<string>? ErrorOccurred;
         public event EventHandler<SpeedTestResult>? UploadCompleted;
         public event EventHandler<SpeedTestResult>? DownloadCompleted;
-        
-        /// <summary>
-        /// Gets the singleton SpeedTestService instance.
-        /// </summary>
+        public event EventHandler<SpeedTestProgressEventArgs>? ProgressChanged;
+
         public static SpeedTestService Instance
         {
             get
             {
                 if (_instance == null)
                 {
-                    lock (_lock)
+                    lock (Lock)
                     {
-                        if (_instance == null)
-                        {
-                            _instance = new SpeedTestService();
-                        }
+                        _instance ??= new SpeedTestService();
                     }
                 }
+
                 return _instance;
             }
         }
-        
-        private TcpClient? _lastValidConnection;
-        private DateTime _lastConnectionCheckTime = DateTime.MinValue;
-        private bool _connectionInvalidLogged = false;
-        
-        /// <summary>
-        /// Gets the current speed test connection from the ConnectionService.
-        /// Returns null if no connection is available or if the connection is no longer valid.
-        /// </summary>
-        private TcpClient? SpeedTestConnection
-        {
-            get
-            {
-                try
-                {
-                    var connectionService = ServiceManager.ConnectionService;
-                    if (connectionService == null)
-                    {
-                        return null;
-                    }
-                    
-                    var speedTestConnection = connectionService.SpeedTestConnection;
-                    
-                    // If we have a new connection, reset the logging flag
-                    if (speedTestConnection != _lastValidConnection)
-                    {
-                        _lastValidConnection = speedTestConnection;
-                        _connectionInvalidLogged = false;
-                    }
-                    
-                    // Check if connection is still valid
-                    if (speedTestConnection != null && !IsConnectionValid(speedTestConnection))
-                    {
-                        // Only log the message once per connection and throttle the checks
-                        var now = DateTime.UtcNow;
-                        if (!_connectionInvalidLogged || (now - _lastConnectionCheckTime).TotalSeconds > 5)
-                        {
-                            OnStatusChanged("Speed test connection is no longer valid, attempting to re-obtain connection");
-                            _connectionInvalidLogged = true;
-                            _lastConnectionCheckTime = now;
-                        }
-                        // The connection will be re-established by the ConnectionService
-                        return null;
-                    }
-                    
-                    // Reset the flag if connection is valid
-                    if (speedTestConnection != null)
-                    {
-                        _connectionInvalidLogged = false;
-                    }
-                    
-                    return speedTestConnection;
-                }
-                catch (Exception ex)
-                {
-                    OnErrorOccurred($"Error obtaining speed test connection: {ex.Message}");
-                    return null;
-                }
-            }
-        }
-        
-        /// <summary>
-        /// Gets whether a valid speed test connection is currently available.
-        /// </summary>
-        public bool IsConnected
-        {
-            get
-            {
-                var connection = SpeedTestConnection;
-                return connection != null && IsConnectionValid(connection);
-            }
-        }
-        
-        /// <summary>
-        /// Private constructor to enforce singleton pattern.
-        /// </summary>
+
+        public bool IsConnected => _sessionManager?.IsReady ?? false;
+
+        public bool IsDownloadTestInProgress => _activeDownloadTestId != null;
+
+        public long ExpectedDownloadSize => _incomingSpeedStreams.Values.FirstOrDefault(s => s.TestId == _activeDownloadTestId)?.ExpectedSize ?? 0;
+
         private SpeedTestService()
         {
             _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
-            
-            // Subscribe to ConnectionService events
-            var connectionService = ServiceManager.ConnectionService;
-            if (connectionService != null)
+            _bulkFrames = Channel.CreateUnbounded<ProtocolFrame>(new UnboundedChannelOptions
             {
-                
-                System.Diagnostics.Debug.WriteLine("SpeedTestService initialized");
-                connectionService.ConnectionsEstablished += OnConnectionsEstablished;
+                SingleReader = true,
+                SingleWriter = false
+            });
+            _ = Task.Run(() => ProcessBulkFramesAsync(_bulkFrameCancellationTokenSource.Token));
+            _sessionManager = ServiceManager.SessionManager;
+            if (_sessionManager != null)
+            {
+                SubscribeToSession(_sessionManager);
             }
-            
+
             OnStatusChanged("SpeedTestService initialized");
         }
-        
-        /// <summary>
-        /// Checks if a TCP connection is still valid and connected.
-        /// </summary>
-        /// <param name="connection">The TCP connection to check</param>
-        /// <returns>True if the connection is valid and connected, false otherwise</returns>
-        private bool IsConnectionValid(TcpClient connection)
-        {
-            try
-            {
-                if (connection == null || !connection.Connected)
-                {
-                    return false;
-                }
-                
-                // Additional check using socket polling
-                var socket = connection.Client;
-                if (socket == null)
-                {
-                    return false;
-                }
-                
-                // Poll the socket to check if it's still connected
-                bool part1 = socket.Poll(1000, SelectMode.SelectRead);
-                bool part2 = (socket.Available == 0);
-                
-                // If both conditions are true, the connection is closed
-                return !(part1 && part2);
-            }
-            catch
-            {
-                return false;
-            }
-        }
-        
-        /// <summary>
-        /// Raises the StatusChanged event.
-        /// </summary>
-        /// <param name="status">The status message</param>
-        private void OnStatusChanged(string status)
-        {
-            try
-            {
-                _dispatcherQueue?.TryEnqueue(() => StatusChanged?.Invoke(this, status));
-            }
-            catch
-            {
-                // Ignore dispatcher errors during status updates
-            }
-        }
-        
-        /// <summary>
-        /// Raises the ErrorOccurred event.
-        /// </summary>
-        /// <param name="error">The error message</param>
-        private void OnErrorOccurred(string error)
-        {
-            try
-            {
-                _dispatcherQueue?.TryEnqueue(() => ErrorOccurred?.Invoke(this, error));
-            }
-            catch
-            {
-                // Ignore dispatcher errors during error reporting
-            }
-        }
-        
-        /// <summary>
-        /// Raises the UploadCompleted event.
-        /// </summary>
-        /// <param name="result">The speed test result</param>
-        private void OnUploadCompleted(SpeedTestResult result)
-        {
-            try
-            {
-                _dispatcherQueue?.TryEnqueue(() => UploadCompleted?.Invoke(this, result));
-            }
-            catch
-            {
-                // Ignore dispatcher errors during event reporting
-            }
-        }
-        
-        /// <summary>
-        /// Raises the DownloadCompleted event.
-        /// </summary>
-        /// <param name="result">The speed test result</param>
-        private void OnDownloadCompleted(SpeedTestResult result)
-        {
-            try
-            {
-                _dispatcherQueue?.TryEnqueue(() => DownloadCompleted?.Invoke(this, result));
-            }
-            catch
-            {
-                // Ignore dispatcher errors during event reporting
-            }
-        }
-        
-        /// <summary>
-        /// Handles the ConnectionsEstablished event from ConnectionService.
-        /// </summary>
-        /// <param name="sender">The event sender</param>
-        /// <param name="e">The event arguments</param>
-        private void OnConnectionsEstablished(object? sender, EventArgs e)
-        {
-            // Automatically start listening when connections are established
-            StartListening();
-            
-            OnStatusChanged("TCP connections established - Speed test is now available");
-        }
 
-        /// <summary>
-        /// Starts listening for incoming speed test requests and data.
-        /// This method should be called when a connection is established.
-        /// </summary>
         public void StartListening()
         {
-            StopListening(); // Stop any existing listener
-            
-            _listenerCancellationTokenSource = new CancellationTokenSource();
-            _listenerTask = Task.Run(() => ListenForIncomingData(_listenerCancellationTokenSource.Token));
-            
-            OnStatusChanged("Speed test listener started");
+            OnStatusChanged(IsConnected ? "Speed test bulk channel is ready" : "Waiting for WDCable session readiness");
         }
 
         public void StopListening()
         {
-            try
-            {
-                _listenerCancellationTokenSource?.Cancel();
-                _listenerTask?.Wait(TimeSpan.FromSeconds(2));
-            }
-            catch
-            {
-                // Ignore errors during stop
-            }
-            finally
-            {
-                _listenerCancellationTokenSource?.Dispose();
-                _listenerCancellationTokenSource = null;
-                _listenerTask = null;
-            }
-            
-            OnStatusChanged("Speed test listener stopped");
         }
-        
-        /// <summary>
-        /// Performs an upload speed test by sending data to the connected client.
-        /// </summary>
-        /// <param name="sizeBytes">The amount of data to upload in bytes</param>
-        /// <returns>A task that completes when the upload test is finished</returns>
+
         public async Task PerformUploadTest(long sizeBytes)
         {
-            const int BUFFER_SIZE = 8192;
-            var startTime = DateTime.UtcNow;
-            
+            if (!await TryEnterSpeedTestAsync(SpeedTestType.Upload, sizeBytes).ConfigureAwait(false))
+            {
+                return;
+            }
+
+            var startedAt = DateTimeOffset.UtcNow;
             try
             {
-                var connection = SpeedTestConnection;
-                if (connection == null || !connection.Connected)
-                {
-                    var errorMsg = "No valid speed test connection available";
-                    OnErrorOccurred(errorMsg);
-                    OnUploadCompleted(new SpeedTestResult
-                    {
-                        TestType = SpeedTestType.Upload,
-                        DataSize = sizeBytes,
-                        Success = false,
-                        ErrorMessage = errorMsg
-                    });
-                    return;
-                }
-                
-                OnStatusChanged($"Starting upload test - {sizeBytes} bytes");
-                
-                var stream = connection.GetStream();
-                
-                // Send protocol header
-                var headerMessage = $"SPEED_TEST_DATA:{sizeBytes}\n";
-                var headerBytes = Encoding.UTF8.GetBytes(headerMessage);
-                await stream.WriteAsync(headerBytes, 0, headerBytes.Length);
-                await stream.FlushAsync();
-                
-                // Create buffer for data transmission
-                var buffer = new byte[BUFFER_SIZE];
-                
-                long totalSent = 0;
-                while (totalSent < sizeBytes)
-                {
-                    var remainingBytes = sizeBytes - totalSent;
-                    var bytesToSend = (int)Math.Min(BUFFER_SIZE, remainingBytes);
-                    
-                    await stream.WriteAsync(buffer, 0, bytesToSend);
-
-                    totalSent += bytesToSend;
-                    
-                    // Update progress
-                    var progress = (double)totalSent / sizeBytes * 100;
-                    OnStatusChanged($"Upload progress: {progress:F1}% ({totalSent}/{sizeBytes} bytes)");
-                }
-                
-                await stream.FlushAsync();
-                
-                var endTime = DateTime.UtcNow;
-                var duration = endTime - startTime;
-                var speedMbps = (sizeBytes * 8.0) / (1024 * 1024) / duration.TotalSeconds;
-                
+                await SendSpeedPayloadAsync(Guid.NewGuid().ToString(), sizeBytes, emitLocalProgress: true).ConfigureAwait(false);
+                var duration = DateTimeOffset.UtcNow - startedAt;
+                var speedMbps = BulkProtocol.CalculateMbps(Math.Max(sizeBytes, 0), duration);
                 OnStatusChanged($"Upload completed - Speed: {speedMbps:F2} Mbps");
-                
                 OnUploadCompleted(new SpeedTestResult
                 {
                     TestType = SpeedTestType.Upload,
-                    DataSize = sizeBytes,
+                    DataSize = Math.Max(sizeBytes, 0),
                     Duration = duration,
                     SpeedMbps = speedMbps,
                     Success = true
@@ -362,435 +108,585 @@ namespace WDCableWUI.Services
             }
             catch (Exception ex)
             {
-                var errorMsg = $"Upload test failed: {ex.Message}";
-                OnErrorOccurred(errorMsg);
-                
-                var endTime = DateTime.UtcNow;
-                var duration = endTime - startTime;
-                
+                var duration = DateTimeOffset.UtcNow - startedAt;
+                var error = $"Upload test failed: {ex.Message}";
+                OnErrorOccurred(error);
                 OnUploadCompleted(new SpeedTestResult
                 {
                     TestType = SpeedTestType.Upload,
-                    DataSize = sizeBytes,
+                    DataSize = Math.Max(sizeBytes, 0),
                     Duration = duration,
                     Success = false,
-                    ErrorMessage = errorMsg
+                    ErrorMessage = error
                 });
             }
+            finally
+            {
+                _speedTestLock.Release();
+            }
         }
-         
-         /// <summary>
-         /// Performs a download speed test by requesting data from the connected client.
-         /// </summary>
-         /// <param name="sizeBytes">The amount of data to request for download in bytes</param>
-         /// <returns>A task that completes when the download request is sent</returns>
-         public async Task PerformDownloadTest(long sizeBytes)
-         {
-             try
-             {
-                 var connection = SpeedTestConnection;
-                 if (connection == null || !connection.Connected)
-                 {
-                     var errorMsg = "No valid speed test connection available";
-                     OnErrorOccurred(errorMsg);
-                     OnDownloadCompleted(new SpeedTestResult
-                     {
-                         TestType = SpeedTestType.Download,
-                         DataSize = sizeBytes,
-                         Success = false,
-                         ErrorMessage = errorMsg
-                     });
-                     return;
-                 }
-                 
-                 OnStatusChanged($"Starting download test - requesting {sizeBytes} bytes");
-                 
-                 var stream = connection.GetStream();
-                 
-                 // Send download request
-                 var requestMessage = $"SPEED_TEST_REQUEST:{sizeBytes}\n";
-                 var requestBytes = Encoding.UTF8.GetBytes(requestMessage);
-                 await stream.WriteAsync(requestBytes, 0, requestBytes.Length);
-                 await stream.FlushAsync();
-                 
-                 // Set download test state
-                 _isDownloadTestInProgress = true;
-                 _expectedDownloadSize = sizeBytes;
-                 
-                 OnStatusChanged("Download request sent, waiting for data from remote client");
-             }
-             catch (Exception ex)
-             {
-                 var errorMsg = $"Download test request failed: {ex.Message}";
-                 OnErrorOccurred(errorMsg);
-                 
-                 _isDownloadTestInProgress = false;
-                 _expectedDownloadSize = 0;
-                 
-                 OnDownloadCompleted(new SpeedTestResult
-                 {
-                     TestType = SpeedTestType.Download,
-                     DataSize = sizeBytes,
-                     Success = false,
-                     ErrorMessage = errorMsg
-                 });
-             }
-         }
-         
-         /// <summary>
-         /// Gets whether a download test is currently in progress.
-         /// </summary>
-         public bool IsDownloadTestInProgress => _isDownloadTestInProgress;
-         
-         /// <summary>
-         /// Gets the expected download size for the current test.
-         /// </summary>
-         public long ExpectedDownloadSize => _expectedDownloadSize;
-         
-         /// <summary>
-          /// Resets the download test state. Should be called when download is completed or cancelled.
-          /// </summary>
-          internal void ResetDownloadTestState()
-          {
-              _isDownloadTestInProgress = false;
-              _expectedDownloadSize = 0;
-          }
-          
-          /// <summary>
-          /// Listens for incoming data on the speed test connection.
-          /// </summary>
-          /// <param name="cancellationToken">Token to cancel the listening operation</param>
-          private async Task ListenForIncomingData(CancellationToken cancellationToken)
-          {
-              int consecutiveFailures = 0;
-              const int maxConsecutiveFailures = 5;
-              
-              try
-              {
-                  while (!cancellationToken.IsCancellationRequested)
-                  {
-                      var connection = SpeedTestConnection;
-                      if (connection == null || !connection.Connected)
-                      {
-                          consecutiveFailures++;
-                          
-                          // Exponential backoff for connection failures
-                          var delay = Math.Min(1000 * (int)Math.Pow(2, Math.Min(consecutiveFailures - 1, 4)), 30000);
-                          
-                          // If we've had too many consecutive failures, stop trying for a while
-                          if (consecutiveFailures >= maxConsecutiveFailures)
-                          {
-                              OnStatusChanged("Too many connection failures, pausing listener for 30 seconds");
-                              await Task.Delay(30000, cancellationToken);
-                              consecutiveFailures = 0; // Reset after long pause
-                          }
-                          else
-                          {
-                              await Task.Delay(delay, cancellationToken);
-                          }
-                          continue;
-                      }
-                      
-                      // Reset failure counter on successful connection
-                      consecutiveFailures = 0;
-                      
-                      try
-                      {
-                          var stream = connection.GetStream();
-                          
-                          // Read header until newline
-                          var headerBytes = new List<byte>();
-                          int byteRead;
-                          
-                          while ((byteRead = stream.ReadByte()) != -1)
-                          {
-                              if (cancellationToken.IsCancellationRequested)
-                                  return;
-                                  
-                              if (byteRead == '\n')
-                              {
-                                  break; // Found newline, header complete
-                              }
-                              
-                              headerBytes.Add((byte)byteRead);
-                          }
-                          
-                          if (headerBytes.Count == 0)
-                          {
-                              continue; // No header received
-                          }
-                          
-                          var headerMessage = Encoding.UTF8.GetString(headerBytes.ToArray());
-                          
-                          // Parse and handle the message
-                          await HandleIncomingMessage(headerMessage, stream, cancellationToken);
-                      }
-                      catch (IOException) when (!cancellationToken.IsCancellationRequested)
-                      {
-                          // Connection was lost, will be handled in next iteration
-                          consecutiveFailures++;
-                      }
-                      catch (ObjectDisposedException) when (!cancellationToken.IsCancellationRequested)
-                      {
-                          // Connection was disposed, will be handled in next iteration
-                          consecutiveFailures++;
-                      }
-                  }
-              }
-              catch (OperationCanceledException)
-              {
-                  // Expected when cancellation is requested
-              }
-              catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
-              {
-                  OnErrorOccurred($"Listener error: {ex.Message}");
-              }
-          }
-          
-          /// <summary>
-          /// Handles incoming speed test messages.
-          /// </summary>
-          /// <param name="headerMessage">The header message received</param>
-          /// <param name="stream">The network stream</param>
-          /// <param name="cancellationToken">Cancellation token</param>
-          private async Task HandleIncomingMessage(string headerMessage, NetworkStream stream, CancellationToken cancellationToken)
-          {
-              try
-              {
-                  if (headerMessage.StartsWith("SPEED_TEST_REQUEST:"))
-                  {
-                      // Handle upload request from remote client
-                      var sizeStr = headerMessage.Substring("SPEED_TEST_REQUEST:".Length);
-                      if (long.TryParse(sizeStr, out long requestedSize))
-                      {
-                          OnStatusChanged($"Received upload request for {requestedSize} bytes");
-                          
-                          // Use our upload function to send data to help remote client test download
-                          await SendDataForRemoteDownloadTest(requestedSize, stream, cancellationToken);
-                      }
-                  }
-                  else if (headerMessage.StartsWith("SPEED_TEST_DATA:"))
-                  {
-                      // Handle incoming data
-                      var sizeStr = headerMessage.Substring("SPEED_TEST_DATA:".Length);
-                      if (long.TryParse(sizeStr, out long dataSize))
-                      {
-                          if (_isDownloadTestInProgress && dataSize == _expectedDownloadSize)
-                          {
-                              // This is the data we requested for our download test
-                              await HandleDownloadTestData(dataSize, stream, cancellationToken);
-                          }
-                          else
-                          {
-                              // This is unsolicited data or upload test data, just drop it
-                              OnStatusChanged($"Dropping {dataSize} bytes of unsolicited data");
-                              await DropIncomingData(dataSize, stream, cancellationToken);
-                          }
-                      }
-                  }
-              }
-              catch (Exception ex)
-              {
-                  OnErrorOccurred($"Error handling message '{headerMessage}': {ex.Message}");
-              }
-          }
-          
-          /// <summary>
-          /// Sends data to help remote client perform download test.
-          /// </summary>
-          private async Task SendDataForRemoteDownloadTest(long sizeBytes, NetworkStream stream, CancellationToken cancellationToken)
-          {
-              const int BUFFER_SIZE = 8192;
-              
-              try
-              {
-                  // Send data header first
-                  var dataHeader = $"SPEED_TEST_DATA:{sizeBytes}\n";
-                  var headerBytes = Encoding.UTF8.GetBytes(dataHeader);
-                  await stream.WriteAsync(headerBytes, 0, headerBytes.Length, cancellationToken);
-                  await stream.FlushAsync(cancellationToken);
-                  
-                  // Send the actual data
-                  var buffer = new byte[BUFFER_SIZE];
-                  for (int i = 0; i < BUFFER_SIZE; i++)
-                  {
-                      buffer[i] = (byte)(i % 256);
-                  }
-                  
-                  long totalSent = 0;
-                  while (totalSent < sizeBytes && !cancellationToken.IsCancellationRequested)
-                  {
-                      var remainingBytes = sizeBytes - totalSent;
-                      var bytesToSend = (int)Math.Min(BUFFER_SIZE, remainingBytes);
-                      
-                      await stream.WriteAsync(buffer, 0, bytesToSend, cancellationToken);
-                      totalSent += bytesToSend;
-                  }
-                  
-                  await stream.FlushAsync(cancellationToken);
-                  OnStatusChanged($"Sent {totalSent} bytes to help remote download test");
-              }
-              catch (Exception ex)
-              {
-                  OnErrorOccurred($"Error sending data for remote download test: {ex.Message}");
-              }
-          }
-          
-          /// <summary>
-          /// Handles incoming download test data and measures speed.
-          /// </summary>
-          private async Task HandleDownloadTestData(long expectedSize, NetworkStream stream, CancellationToken cancellationToken)
-          {
-              const int BUFFER_SIZE = 8192;
-              var startTime = DateTime.UtcNow;
-              
-              try
-              {
-                  OnStatusChanged("Receiving download test data");
-                  
-                  var buffer = new byte[BUFFER_SIZE];
-                  long totalReceived = 0;
-                  
-                  while (totalReceived < expectedSize && !cancellationToken.IsCancellationRequested)
-                  {
-                      var remainingBytes = expectedSize - totalReceived;
-                      var bytesToRead = (int)Math.Min(BUFFER_SIZE, remainingBytes);
-                      
-                      var bytesRead = await stream.ReadAsync(buffer, 0, bytesToRead, cancellationToken);
-                      if (bytesRead == 0)
-                      {
-                          break; // Connection closed
-                      }
-                      
-                      totalReceived += bytesRead;
-                      
-                      // Update progress
-                      var progress = (double)totalReceived / expectedSize * 100;
-                      OnStatusChanged($"Download progress: {progress:F1}% ({totalReceived}/{expectedSize} bytes)");
-                  }
-                  
-                  var endTime = DateTime.UtcNow;
-                  var duration = endTime - startTime;
-                  var speedMbps = (totalReceived * 8.0) / (1024 * 1024) / duration.TotalSeconds;
-                  
-                  ResetDownloadTestState();
-                  
-                  OnStatusChanged($"Download completed - Speed: {speedMbps:F2} Mbps");
-                  
-                  OnDownloadCompleted(new SpeedTestResult
-                  {
-                      TestType = SpeedTestType.Download,
-                      DataSize = totalReceived,
-                      Duration = duration,
-                      SpeedMbps = speedMbps,
-                      Success = totalReceived == expectedSize
-                  });
-              }
-              catch (Exception ex)
-              {
-                  ResetDownloadTestState();
-                  OnErrorOccurred($"Error during download test: {ex.Message}");
-                  
-                  OnDownloadCompleted(new SpeedTestResult
-                  {
-                      TestType = SpeedTestType.Download,
-                      DataSize = expectedSize,
-                      Success = false,
-                      ErrorMessage = ex.Message
-                  });
-              }
-          }
-          
-          /// <summary>
-          /// Drops incoming data that we don't need.
-          /// </summary>
-          private async Task DropIncomingData(long dataSize, NetworkStream stream, CancellationToken cancellationToken)
-          {
-              const int BUFFER_SIZE = 8192;
-              
-              try
-              {
-                  var buffer = new byte[BUFFER_SIZE];
-                  long totalDropped = 0;
-                  
-                  while (totalDropped < dataSize && !cancellationToken.IsCancellationRequested)
-                  {
-                      var remainingBytes = dataSize - totalDropped;
-                      var bytesToRead = (int)Math.Min(BUFFER_SIZE, remainingBytes);
-                      
-                      var bytesRead = await stream.ReadAsync(buffer, 0, bytesToRead, cancellationToken);
-                      if (bytesRead == 0)
-                      {
-                          break; // Connection closed
-                      }
-                      
-                      totalDropped += bytesRead;
-                  }
-                  
-                  OnStatusChanged($"Dropped {totalDropped} bytes of unwanted data");
-              }
-              catch (Exception ex)
-              {
-                  OnErrorOccurred($"Error dropping data: {ex.Message}");
-              }
-          }
-         
-         /// <summary>
-         /// Disposes the SpeedTestService and cleans up resources.
-         /// </summary>
+
+        public async Task PerformDownloadTest(long sizeBytes)
+        {
+            if (!await TryEnterSpeedTestAsync(SpeedTestType.Download, sizeBytes).ConfigureAwait(false))
+            {
+                return;
+            }
+
+            var testId = Guid.NewGuid().ToString();
+            var streamId = BulkProtocol.NextStreamId();
+            var startedAt = DateTimeOffset.UtcNow;
+            var completionSource = new TaskCompletionSource<SpeedTestResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+            _activeDownloadTestId = testId;
+
+            try
+            {
+                RequireReadySession();
+                OnStatusChanged($"Starting download test - requesting {sizeBytes} bytes");
+
+                _pendingDownloads[testId] = completionSource;
+                await _sessionManager!.SendBulkFrameAsync(
+                    ProtocolFrameType.BulkStart,
+                    BulkProtocol.BuildMetadata(new Dictionary<string, object?>
+                    {
+                        ["kind"] = BulkProtocol.KindSpeedRequest,
+                        ["testId"] = testId,
+                        ["sessionId"] = _sessionManager.CurrentSessionId,
+                        ["sizeBytes"] = Math.Max(sizeBytes, 0),
+                        ["timestamp"] = startedAt.ToUnixTimeMilliseconds()
+                    }),
+                    streamId: streamId,
+                    correlationId: Guid.Parse(testId)).ConfigureAwait(false);
+
+                using var timeoutCts = new CancellationTokenSource(SpeedTestTimeout);
+                using (timeoutCts.Token.Register(() => completionSource.TrySetException(new TimeoutException("Timed out waiting for speed data"))))
+                {
+                    var result = await completionSource.Task.ConfigureAwait(false);
+                    OnDownloadCompleted(result);
+                }
+            }
+            catch (Exception ex)
+            {
+                var duration = DateTimeOffset.UtcNow - startedAt;
+                var error = $"Download test failed: {ex.Message}";
+                OnErrorOccurred(error);
+                OnDownloadCompleted(new SpeedTestResult
+                {
+                    TestType = SpeedTestType.Download,
+                    DataSize = Math.Max(sizeBytes, 0),
+                    Duration = duration,
+                    Success = false,
+                    ErrorMessage = error
+                });
+            }
+            finally
+            {
+                _pendingDownloads.TryRemove(testId, out _);
+                _activeDownloadTestId = null;
+                _speedTestLock.Release();
+            }
+        }
+
+        internal void ResetDownloadTestState()
+        {
+            _activeDownloadTestId = null;
+        }
+
         public void Dispose()
         {
             if (_isDisposed)
             {
                 return;
             }
-            
-            try
+
+            _isDisposed = true;
+            _bulkFrameCancellationTokenSource.Cancel();
+            _bulkFrames.Writer.TryComplete();
+            if (_sessionManager != null)
             {
-                // Stop listening for requests
-                StopListening();
-                
-                // Reset connection state
-                _lastValidConnection = null;
-                _connectionInvalidLogged = false;
-                _lastConnectionCheckTime = DateTime.MinValue;
-                
-                // Reset download test state
-                _isDownloadTestInProgress = false;
-                _expectedDownloadSize = 0;
-                
-                // Unsubscribe from ConnectionService events
-                var connectionService = ServiceManager.ConnectionService;
-                if (connectionService != null)
-                {
-                    connectionService.ConnectionsEstablished -= OnConnectionsEstablished;
-                }
-                
-                OnStatusChanged("SpeedTestService disposing");
-                _isDisposed = true;
+                UnsubscribeFromSession(_sessionManager);
+                _sessionManager = null;
             }
-            catch
-            {
-                // Ignore errors during disposal
-            }
+
+            _speedTestLock.Dispose();
+            _bulkFrameCancellationTokenSource.Dispose();
+            _incomingSpeedStreams.Clear();
+            _pendingDownloads.Clear();
+            OnStatusChanged("SpeedTestService disposing");
         }
-        
-        /// <summary>
-        /// Resets the singleton instance. Used for testing or service restart scenarios.
-        /// </summary>
+
         public static void ResetInstance()
         {
-            lock (_lock)
+            lock (Lock)
             {
                 _instance?.Dispose();
                 _instance = null;
             }
         }
+
+        private void SubscribeToSession(SessionManager sessionManager)
+        {
+            sessionManager.SessionReady += OnSessionReady;
+            sessionManager.StateChanged += OnSessionStateChanged;
+            sessionManager.SessionFailed += OnSessionFailed;
+            sessionManager.BulkFrameReceived += OnBulkFrameReceived;
+            sessionManager.ControlFrameReceived += OnControlFrameReceived;
+        }
+
+        private void UnsubscribeFromSession(SessionManager sessionManager)
+        {
+            sessionManager.SessionReady -= OnSessionReady;
+            sessionManager.StateChanged -= OnSessionStateChanged;
+            sessionManager.SessionFailed -= OnSessionFailed;
+            sessionManager.BulkFrameReceived -= OnBulkFrameReceived;
+            sessionManager.ControlFrameReceived -= OnControlFrameReceived;
+        }
+
+        private void OnSessionReady(object? sender, SessionReadyEventArgs e)
+        {
+            OnStatusChanged("WDCable session ready - Speed test is available");
+        }
+
+        private void OnSessionStateChanged(object? sender, SessionStateChangedEventArgs e)
+        {
+            if (e.Phase is SessionPhase.Disconnected or SessionPhase.Failed or SessionPhase.Disconnecting)
+            {
+                FailActiveSpeedTests("Session disconnected");
+            }
+        }
+
+        private void OnSessionFailed(object? sender, SessionFailedEventArgs e)
+        {
+            FailActiveSpeedTests(e.Message);
+            OnErrorOccurred($"WDCable session failed: {e.Message}");
+        }
+
+        private void OnControlFrameReceived(object? sender, ProtocolFrameReceivedEventArgs e)
+        {
+            if (e.Frame.Type != ProtocolFrameType.Error)
+            {
+                return;
+            }
+
+            try
+            {
+                var metadata = BulkProtocol.ParseMetadata(e.Frame.MetadataJson);
+                var code = BulkProtocol.GetString(metadata, "code");
+                if (code.StartsWith("speed_", StringComparison.Ordinal) || code.StartsWith("bulk_", StringComparison.Ordinal))
+                {
+                    var message = BulkProtocol.GetString(metadata, "message", "Peer reported speed test error");
+                    FailActiveSpeedTests(message);
+                    OnErrorOccurred(message);
+                }
+            }
+            catch (Exception ex)
+            {
+                OnErrorOccurred($"Invalid peer speed error metadata: {ex.Message}");
+            }
+        }
+
+        private void OnBulkFrameReceived(object? sender, ProtocolFrameReceivedEventArgs e)
+        {
+            if (!_isDisposed)
+            {
+                _bulkFrames.Writer.TryWrite(e.Frame);
+            }
+        }
+
+        private async Task ProcessBulkFramesAsync(CancellationToken cancellationToken)
+        {
+            try
+            {
+                await foreach (var frame in _bulkFrames.Reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
+                {
+                    await HandleBulkFrameAsync(frame).ConfigureAwait(false);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+            }
+        }
+
+        private async Task HandleBulkFrameAsync(ProtocolFrame frame)
+        {
+            try
+            {
+                var metadata = BulkProtocol.ParseMetadata(frame.MetadataJson);
+                var kind = BulkProtocol.GetString(metadata, "kind");
+                if (kind != BulkProtocol.KindSpeedData &&
+                    kind != BulkProtocol.KindSpeedRequest &&
+                    !_incomingSpeedStreams.ContainsKey(frame.StreamId))
+                {
+                    return;
+                }
+
+                switch (frame.Type)
+                {
+                    case ProtocolFrameType.BulkStart:
+                        if (kind == BulkProtocol.KindSpeedRequest)
+                        {
+                            await HandleSpeedRequestAsync(frame, metadata).ConfigureAwait(false);
+                        }
+                        else if (kind == BulkProtocol.KindSpeedData)
+                        {
+                            StartIncomingSpeedData(frame, metadata);
+                        }
+                        break;
+                    case ProtocolFrameType.BulkChunk:
+                        HandleIncomingSpeedChunk(frame);
+                        break;
+                    case ProtocolFrameType.BulkComplete:
+                        CompleteIncomingSpeedData(frame, metadata);
+                        break;
+                    case ProtocolFrameType.BulkCancel:
+                        CancelIncomingSpeed(frame, metadata);
+                        break;
+                }
+            }
+            catch (Exception ex)
+            {
+                OnErrorOccurred($"Speed test frame handling failed: {ex.Message}");
+            }
+        }
+
+        private async Task HandleSpeedRequestAsync(ProtocolFrame frame, IReadOnlyDictionary<string, JsonElement> metadata)
+        {
+            var requestedBytes = BulkProtocol.GetInt64(metadata, "sizeBytes", 0);
+            var testId = BulkProtocol.GetString(metadata, "testId", Guid.NewGuid().ToString());
+            try
+            {
+                await SendSpeedPayloadAsync(testId, requestedBytes, emitLocalProgress: false).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                await SendBulkErrorAsync(frame.StreamId, "speed_send_failed", ex.Message).ConfigureAwait(false);
+            }
+        }
+
+        private void StartIncomingSpeedData(ProtocolFrame frame, IReadOnlyDictionary<string, JsonElement> metadata)
+        {
+            var testId = BulkProtocol.GetString(metadata, "testId", frame.CorrelationId.ToString());
+            var expectedSize = BulkProtocol.GetInt64(metadata, "sizeBytes", -1);
+            var isLocalDownload = _pendingDownloads.ContainsKey(testId);
+            var incoming = new IncomingSpeedStream(testId, expectedSize, DateTimeOffset.UtcNow, isLocalDownload);
+            _incomingSpeedStreams[frame.StreamId] = incoming;
+            if (incoming.IsLocalDownload)
+            {
+                OnStatusChanged($"Receiving speed test data: {expectedSize} bytes");
+                OnProgressChanged(new SpeedTestProgressEventArgs(
+                    SpeedTestType.Download,
+                    0,
+                    expectedSize,
+                    0,
+                    0));
+            }
+        }
+
+        private void HandleIncomingSpeedChunk(ProtocolFrame frame)
+        {
+            if (!_incomingSpeedStreams.TryGetValue(frame.StreamId, out var incoming))
+            {
+                return;
+            }
+
+            incoming.BytesReceived += frame.Payload.Length;
+            if (!incoming.IsLocalDownload)
+            {
+                return;
+            }
+
+            var duration = DateTimeOffset.UtcNow - incoming.StartedAt;
+            var speedMbps = BulkProtocol.CalculateMbps(incoming.BytesReceived, duration);
+            var progress = incoming.ExpectedSize > 0
+                ? Math.Min(100, incoming.BytesReceived * 100.0 / incoming.ExpectedSize)
+                : 0;
+
+            OnProgressChanged(new SpeedTestProgressEventArgs(
+                SpeedTestType.Download,
+                incoming.BytesReceived,
+                incoming.ExpectedSize,
+                speedMbps,
+                progress));
+        }
+
+        private void CompleteIncomingSpeedData(ProtocolFrame frame, IReadOnlyDictionary<string, JsonElement> metadata)
+        {
+            if (!_incomingSpeedStreams.TryRemove(frame.StreamId, out var incoming))
+            {
+                return;
+            }
+
+            var duration = DateTimeOffset.UtcNow - incoming.StartedAt;
+            var speedMbps = BulkProtocol.CalculateMbps(incoming.BytesReceived, duration);
+            var result = new SpeedTestResult
+            {
+                TestType = SpeedTestType.Download,
+                DataSize = incoming.BytesReceived,
+                Duration = duration,
+                SpeedMbps = speedMbps,
+                Success = incoming.ExpectedSize < 0 || incoming.BytesReceived == incoming.ExpectedSize
+            };
+
+            if (!incoming.IsLocalDownload)
+            {
+                OnStatusChanged($"Peer speed upload consumed: {incoming.BytesReceived} bytes");
+                return;
+            }
+
+            OnProgressChanged(new SpeedTestProgressEventArgs(
+                SpeedTestType.Download,
+                incoming.BytesReceived,
+                incoming.ExpectedSize,
+                speedMbps,
+                100));
+
+            if (_pendingDownloads.TryGetValue(incoming.TestId, out var completionSource))
+            {
+                completionSource.TrySetResult(result);
+            }
+
+            OnStatusChanged($"Download completed - Speed: {speedMbps:F2} Mbps");
+        }
+
+        private void CancelIncomingSpeed(ProtocolFrame frame, IReadOnlyDictionary<string, JsonElement> metadata)
+        {
+            if (!_incomingSpeedStreams.TryRemove(frame.StreamId, out var incoming))
+            {
+                return;
+            }
+
+            var reason = BulkProtocol.GetString(metadata, "reason", "cancelled");
+            if (incoming.IsLocalDownload && _pendingDownloads.TryGetValue(incoming.TestId, out var completionSource))
+            {
+                completionSource.TrySetException(new IOException($"Speed test cancelled: {reason}"));
+            }
+
+            if (incoming.IsLocalDownload)
+            {
+                OnErrorOccurred($"Speed test cancelled: {reason}");
+            }
+            else
+            {
+                OnStatusChanged($"Peer speed upload cancelled: {reason}");
+            }
+        }
+
+        private async Task SendSpeedPayloadAsync(string testId, long sizeBytes, bool emitLocalProgress)
+        {
+            RequireReadySession();
+
+            var safeSize = Math.Max(sizeBytes, 0);
+            var streamId = BulkProtocol.NextStreamId();
+            var startedAt = DateTimeOffset.UtcNow;
+            var correlationId = BulkProtocol.GuidFromStringOrNew(testId);
+            long bytesSent = 0;
+            var buffer = new byte[BulkProtocol.ChunkSize];
+
+            await _sessionManager!.SendBulkFrameAsync(
+                ProtocolFrameType.BulkStart,
+                BulkProtocol.BuildMetadata(new Dictionary<string, object?>
+                {
+                    ["kind"] = BulkProtocol.KindSpeedData,
+                    ["testId"] = testId,
+                    ["sessionId"] = _sessionManager.CurrentSessionId,
+                    ["sizeBytes"] = safeSize,
+                    ["timestamp"] = startedAt.ToUnixTimeMilliseconds()
+                }),
+                streamId: streamId,
+                correlationId: correlationId).ConfigureAwait(false);
+
+            while (bytesSent < safeSize)
+            {
+                var chunkSize = (int)Math.Min(buffer.Length, safeSize - bytesSent);
+                var payload = chunkSize == buffer.Length ? buffer : buffer[..chunkSize];
+
+                await _sessionManager.SendBulkFrameAsync(
+                    ProtocolFrameType.BulkChunk,
+                    BulkProtocol.BuildMetadata(new Dictionary<string, object?>
+                    {
+                        ["kind"] = BulkProtocol.KindSpeedData,
+                        ["testId"] = testId,
+                        ["offset"] = bytesSent
+                    }),
+                    payload,
+                    streamId,
+                    correlationId).ConfigureAwait(false);
+
+                bytesSent += chunkSize;
+
+                if (emitLocalProgress)
+                {
+                    var duration = DateTimeOffset.UtcNow - startedAt;
+                    var speedMbps = BulkProtocol.CalculateMbps(bytesSent, duration);
+                    var progress = safeSize > 0 ? bytesSent * 100.0 / safeSize : 100;
+                    OnProgressChanged(new SpeedTestProgressEventArgs(
+                        SpeedTestType.Upload,
+                        bytesSent,
+                        safeSize,
+                        speedMbps,
+                        progress));
+                }
+            }
+
+            await _sessionManager.SendBulkFrameAsync(
+                ProtocolFrameType.BulkComplete,
+                BulkProtocol.BuildMetadata(new Dictionary<string, object?>
+                {
+                    ["kind"] = BulkProtocol.KindSpeedData,
+                    ["testId"] = testId,
+                    ["sizeBytes"] = bytesSent,
+                    ["timestamp"] = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
+                }),
+                streamId: streamId,
+                correlationId: correlationId).ConfigureAwait(false);
+
+            if (emitLocalProgress)
+            {
+                var duration = DateTimeOffset.UtcNow - startedAt;
+                var speedMbps = BulkProtocol.CalculateMbps(bytesSent, duration);
+                OnProgressChanged(new SpeedTestProgressEventArgs(
+                    SpeedTestType.Upload,
+                    bytesSent,
+                    safeSize,
+                    speedMbps,
+                    100));
+            }
+        }
+
+        private async Task<bool> TryEnterSpeedTestAsync(SpeedTestType testType, long sizeBytes)
+        {
+            if (_sessionManager?.IsReady != true)
+            {
+                var error = "WDCable session is not ready for speed test";
+                OnErrorOccurred(error);
+                EmitFailureResult(testType, sizeBytes, error);
+                return false;
+            }
+
+            if (!await _speedTestLock.WaitAsync(0).ConfigureAwait(false))
+            {
+                var error = "A speed test is already running";
+                OnErrorOccurred(error);
+                EmitFailureResult(testType, sizeBytes, error);
+                return false;
+            }
+
+            return true;
+        }
+
+        private void EmitFailureResult(SpeedTestType testType, long sizeBytes, string error)
+        {
+            var result = new SpeedTestResult
+            {
+                TestType = testType,
+                DataSize = Math.Max(sizeBytes, 0),
+                Success = false,
+                ErrorMessage = error
+            };
+
+            if (testType == SpeedTestType.Upload)
+            {
+                OnUploadCompleted(result);
+            }
+            else
+            {
+                OnDownloadCompleted(result);
+            }
+        }
+
+        private void RequireReadySession()
+        {
+            if (_sessionManager?.IsReady != true)
+            {
+                throw new InvalidOperationException("WDCable session is not ready.");
+            }
+        }
+
+        private async Task SendBulkErrorAsync(long streamId, string code, string message)
+        {
+            if (_sessionManager?.IsReady != true)
+            {
+                return;
+            }
+
+            await _sessionManager.SendControlFrameAsync(
+                ProtocolFrameType.Error,
+                BulkProtocol.BuildMetadata(new Dictionary<string, object?>
+                {
+                    ["code"] = code,
+                    ["message"] = message,
+                    ["streamId"] = streamId
+                }),
+                streamId: streamId).ConfigureAwait(false);
+        }
+
+        private void FailActiveSpeedTests(string message)
+        {
+            foreach (var pending in _pendingDownloads.Values)
+            {
+                pending.TrySetException(new IOException(message));
+            }
+
+            _pendingDownloads.Clear();
+            _incomingSpeedStreams.Clear();
+            _activeDownloadTestId = null;
+        }
+
+        private void OnStatusChanged(string status)
+        {
+            RaiseOnDispatcher(() => StatusChanged?.Invoke(this, status));
+        }
+
+        private void OnErrorOccurred(string error)
+        {
+            RaiseOnDispatcher(() => ErrorOccurred?.Invoke(this, error));
+        }
+
+        private void OnUploadCompleted(SpeedTestResult result)
+        {
+            RaiseOnDispatcher(() => UploadCompleted?.Invoke(this, result));
+        }
+
+        private void OnDownloadCompleted(SpeedTestResult result)
+        {
+            RaiseOnDispatcher(() => DownloadCompleted?.Invoke(this, result));
+        }
+
+        private void OnProgressChanged(SpeedTestProgressEventArgs args)
+        {
+            RaiseOnDispatcher(() => ProgressChanged?.Invoke(this, args));
+        }
+
+        private void RaiseOnDispatcher(Action action)
+        {
+            if (_dispatcherQueue != null)
+            {
+                _dispatcherQueue.TryEnqueue(() => action());
+            }
+            else
+            {
+                action();
+            }
+        }
+
+        private sealed class IncomingSpeedStream
+        {
+            public IncomingSpeedStream(string testId, long expectedSize, DateTimeOffset startedAt, bool isLocalDownload)
+            {
+                TestId = testId;
+                ExpectedSize = expectedSize;
+                StartedAt = startedAt;
+                IsLocalDownload = isLocalDownload;
+            }
+
+            public string TestId { get; }
+            public long ExpectedSize { get; }
+            public DateTimeOffset StartedAt { get; }
+            public bool IsLocalDownload { get; }
+            public long BytesReceived { get; set; }
+        }
     }
-    
-    /// <summary>
-    /// Represents the result of a speed test operation.
-    /// </summary>
+
     public class SpeedTestResult
     {
         public SpeedTestType TestType { get; set; }
@@ -800,10 +696,30 @@ namespace WDCableWUI.Services
         public bool Success { get; set; }
         public string? ErrorMessage { get; set; }
     }
-    
-    /// <summary>
-    /// Enumeration of speed test types.
-    /// </summary>
+
+    public class SpeedTestProgressEventArgs : EventArgs
+    {
+        public SpeedTestProgressEventArgs(
+            SpeedTestType testType,
+            long bytesTransferred,
+            long totalBytes,
+            double speedMbps,
+            double progressPercentage)
+        {
+            TestType = testType;
+            BytesTransferred = bytesTransferred;
+            TotalBytes = totalBytes;
+            SpeedMbps = speedMbps;
+            ProgressPercentage = progressPercentage;
+        }
+
+        public SpeedTestType TestType { get; }
+        public long BytesTransferred { get; }
+        public long TotalBytes { get; }
+        public double SpeedMbps { get; }
+        public double ProgressPercentage { get; }
+    }
+
     public enum SpeedTestType
     {
         Upload,

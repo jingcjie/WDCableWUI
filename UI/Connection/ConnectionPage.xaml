@@ -117,11 +117,18 @@
                                 <StackPanel Spacing="8">
                                     <TextBlock x:Name="ConnectionStatusText"
                                               x:Uid="Connection_Status_NotConnected"
-                                              Style="{StaticResource BodyTextBlockStyle}"/>
+                                              Style="{StaticResource BodyTextBlockStyle}"
+                                              TextWrapping="Wrap"/>
                                     <TextBlock x:Name="DeviceRoleText"
                                               Text=""
                                               Style="{StaticResource CaptionTextBlockStyle}"
-                                              Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                              Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                              TextWrapping="Wrap"/>
+                                    <TextBlock x:Name="LastStatusText"
+                                              Text=""
+                                              Style="{StaticResource CaptionTextBlockStyle}"
+                                              Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                              TextWrapping="Wrap"/>
                                 </StackPanel>
                             </Border>
                             

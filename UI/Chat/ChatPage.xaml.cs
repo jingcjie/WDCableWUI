@@ -8,6 +8,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Threading.Tasks;
 using WDCableWUI.Services;
 using Windows.System;
 
@@ -100,7 +101,7 @@ namespace WDCableWUI.UI.Chat
             try
             {
                 // Access ChatService through ServiceManager with null checks
-                _chatService = ServiceManager.IsInitialized ? ServiceManager.ChatService : null;
+                _chatService = ServiceManager.AreWiFiDirectServicesAvailable ? ServiceManager.ChatService : null;
                 SubscribeToChatEvents();
             }
             catch (Exception ex)
@@ -166,7 +167,9 @@ namespace WDCableWUI.UI.Chat
         {
             try
             {
-                _isConnected = ServiceManager.IsInitialized && ServiceManager.IsConnected && (_chatService?.IsConnected ?? false);
+                _isConnected = ServiceManager.AreWiFiDirectServicesAvailable &&
+                    (ServiceManager.SessionManager?.IsReady ?? false) &&
+                    (_chatService?.IsConnected ?? false);
             }
             catch (Exception ex)
             {
@@ -178,7 +181,7 @@ namespace WDCableWUI.UI.Chat
             {
                 if (_isConnected)
                 {
-                    ConnectionStatusText.Text = "Connected";
+                    ConnectionStatusText.Text = "Ready";
                     ConnectionStatusText.Foreground = (Brush)Application.Current.Resources["SystemFillColorSuccessBrush"];
                     
                     // DisabledOverlay.Visibility = Visibility.Collapsed;
@@ -187,8 +190,12 @@ namespace WDCableWUI.UI.Chat
                 }
                 else
                 {
-                    ConnectionStatusText.Text = "Disconnected";
-                    ConnectionStatusText.Foreground = (Brush)Application.Current.Resources["SystemFillColorCriticalBrush"];
+                    var wifiLinked = ServiceManager.IsConnected;
+                    ConnectionStatusText.Text = ServiceManager.AreWiFiDirectServicesAvailable
+                        ? (wifiLinked ? "Waiting for WDCable" : "Disconnected")
+                        : "WiFi Direct unavailable";
+                    ConnectionStatusText.Foreground = (Brush)Application.Current.Resources[
+                        wifiLinked ? "SystemFillColorCautionBrush" : "SystemFillColorCriticalBrush"];
                     
                     // DisabledOverlay.Visibility = Visibility.Visible;
                     MessageTextBox.IsEnabled = false;
@@ -279,13 +286,17 @@ namespace WDCableWUI.UI.Chat
     
         private void OnChatServiceStatusChanged(object? sender, string status)
         {
-            AddSystemMessage(status);
+            if (status != "Message sent")
+            {
+                AddSystemMessage(status);
+            }
             UpdateConnectionStatus();
         }
 
         private void OnChatServiceErrorOccurred(object? sender, string error)
         {
             AddSystemMessage($"Error: {error}");
+            UpdateConnectionStatus();
         }
         
         private void OnMessageReceived(object? sender, string message)
@@ -393,7 +404,7 @@ namespace WDCableWUI.UI.Chat
             });
         }
         
-        private void SendMessage()
+        private async Task SendMessageAsync()
         {
             var messageText = MessageTextBox.Text.Trim();
             if (string.IsNullOrEmpty(messageText) || !_isConnected)
@@ -403,34 +414,41 @@ namespace WDCableWUI.UI.Chat
             
             try
             {
-                // Add message to UI immediately
-                AddSelfMessage(messageText);
-                
-                // Clear input
-                MessageTextBox.Text = string.Empty;
-                
-                // Send message through ChatService
-                if (_chatService != null)
+                SendButton.IsEnabled = false;
+
+                if (_chatService == null)
                 {
-                    _chatService.SendMessage(messageText);
+                    AddSystemMessage("ChatService is not available");
+                    return;
+                }
+
+                var result = await _chatService.SendMessageAsync(messageText);
+                if (result.Success)
+                {
+                    AddSelfMessage(messageText);
+                    MessageTextBox.Text = string.Empty;
                 }
                 else
                 {
-                    AddSystemMessage("ChatService is not available");
+                    AddSystemMessage(result.ErrorMessage ?? "Failed to send message");
                 }
             }
             catch (Exception ex)
             {
                 AddSystemMessage($"Failed to send message: {ex.Message}");
             }
+            finally
+            {
+                UpdateConnectionStatus();
+            }
         }
         
-        private void SendButton_Click(object sender, RoutedEventArgs e)
+        private async void SendButton_Click(object sender, RoutedEventArgs e)
         {
-            SendMessage();
+            await SendMessageAsync();
         }
         
-        private void MessageTextBox_KeyDown(object sender, KeyRoutedEventArgs e)
+        private async void MessageTextBox_KeyDown(object sender, KeyRoutedEventArgs e)
         {
             if (e.Key == VirtualKey.Enter)
             {
@@ -440,7 +458,7 @@ namespace WDCableWUI.UI.Chat
                 if (!shiftPressed)
                 {
                     e.Handled = true;
-                    SendMessage();
+                    await SendMessageAsync();
                 }
             }
         }

@@ -5,13 +5,17 @@ using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Navigation;
 using Microsoft.UI;
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.IO;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using Windows.Storage;
 using Windows.Storage.Pickers;
 using Windows.ApplicationModel.DataTransfer;
+using Windows.System;
 using WDCableWUI.Services;
 
 namespace WDCableWUI.UI.FileTransfer
@@ -21,16 +25,86 @@ namespace WDCableWUI.UI.FileTransfer
     /// <summary>
     /// Data model for transfer records
     /// </summary>
-    public class TransferRecord
+    public class TransferRecord : INotifyPropertyChanged
     {
-        public string FileName { get; set; } = string.Empty;
-        public string Status { get; set; } = string.Empty;
-        public string TimeStamp { get; set; } = string.Empty;
-        public string TypeIcon { get; set; } = string.Empty;
-        public SolidColorBrush StatusColor { get; set; } = new SolidColorBrush(Colors.Transparent);
-        public double Progress { get; set; }
-        public Visibility ProgressVisibility { get; set; }
-        public TransferType Type { get; set; }
+        private string _fileName = string.Empty;
+        private string _status = string.Empty;
+        private string _timeStamp = string.Empty;
+        private string _typeIcon = string.Empty;
+        private string _filePath = string.Empty;
+        private SolidColorBrush _statusColor = new(Colors.Transparent);
+        private double _progress;
+        private Visibility _progressVisibility = Visibility.Collapsed;
+        private TransferType _type;
+
+        public event PropertyChangedEventHandler? PropertyChanged;
+
+        public string TransferId { get; set; } = string.Empty;
+
+        public string FileName
+        {
+            get => _fileName;
+            set => SetProperty(ref _fileName, value);
+        }
+
+        public string Status
+        {
+            get => _status;
+            set => SetProperty(ref _status, value);
+        }
+
+        public string TimeStamp
+        {
+            get => _timeStamp;
+            set => SetProperty(ref _timeStamp, value);
+        }
+
+        public string TypeIcon
+        {
+            get => _typeIcon;
+            set => SetProperty(ref _typeIcon, value);
+        }
+
+        public string FilePath
+        {
+            get => _filePath;
+            set => SetProperty(ref _filePath, value);
+        }
+
+        public SolidColorBrush StatusColor
+        {
+            get => _statusColor;
+            set => SetProperty(ref _statusColor, value);
+        }
+
+        public double Progress
+        {
+            get => _progress;
+            set => SetProperty(ref _progress, Math.Min(100, Math.Max(0, value)));
+        }
+
+        public Visibility ProgressVisibility
+        {
+            get => _progressVisibility;
+            set => SetProperty(ref _progressVisibility, value);
+        }
+
+        public TransferType Type
+        {
+            get => _type;
+            set => SetProperty(ref _type, value);
+        }
+
+        private void SetProperty<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
+        {
+            if (EqualityComparer<T>.Default.Equals(field, value))
+            {
+                return;
+            }
+
+            field = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
     }
 
     public enum TransferType
@@ -50,6 +124,9 @@ namespace WDCableWUI.UI.FileTransfer
         private StorageFile? _selectedFile = null;
         private FileTransferService? _fileTransferService;
         private FileTransferService? _subscribedFileTransferService;
+        private SessionManager? _sessionManager;
+        private SessionManager? _subscribedSessionManager;
+        private readonly Dictionary<string, TransferRecord> _activeTransferRecords = new();
 
         public FileTransferPage()
         {
@@ -79,13 +156,15 @@ namespace WDCableWUI.UI.FileTransfer
         {
             try
             {
-                _fileTransferService = ServiceManager.IsInitialized ? ServiceManager.FileTransferService : null;
+                _fileTransferService = ServiceManager.AreWiFiDirectServicesAvailable ? ServiceManager.FileTransferService : null;
+                _sessionManager = ServiceManager.AreWiFiDirectServicesAvailable ? ServiceManager.SessionManager : null;
             }
             catch (Exception ex)
             {
                 // Service manager might not be initialized yet
                 System.Diagnostics.Debug.WriteLine($"FileTransferService not available: {ex.Message}");
                 _fileTransferService = null;
+                _sessionManager = null;
             }
         }
         
@@ -103,20 +182,28 @@ namespace WDCableWUI.UI.FileTransfer
         
         private void SubscribeToFileTransferEvents()
         {
-            if (_fileTransferService == null || _subscribedFileTransferService == _fileTransferService)
+            if (_fileTransferService != null && _subscribedFileTransferService != _fileTransferService)
             {
-                return;
+                UnsubscribeFromFileTransferEvents();
+
+                _fileTransferService.FileSent += OnFileSent;
+                _fileTransferService.FileReceived += OnFileReceived;
+                _fileTransferService.FileReceiveStarted += OnFileReceiveStarted;
+                _fileTransferService.TransferProgress += OnTransferProgress;
+                _fileTransferService.TransferFailed += OnTransferFailed;
+                _fileTransferService.StatusChanged += OnFileTransferStatusChanged;
+                _fileTransferService.ErrorOccurred += OnFileTransferError;
+                _subscribedFileTransferService = _fileTransferService;
             }
 
-            UnsubscribeFromFileTransferEvents();
-
-            _fileTransferService.FileSent += OnFileSent;
-            _fileTransferService.FileReceived += OnFileReceived;
-            _fileTransferService.FileReceiveStarted += OnFileReceiveStarted;
-            _fileTransferService.TransferProgress += OnTransferProgress;
-            _fileTransferService.StatusChanged += OnFileTransferStatusChanged;
-            _fileTransferService.ErrorOccurred += OnFileTransferError;
-            _subscribedFileTransferService = _fileTransferService;
+            if (_sessionManager != null && _subscribedSessionManager != _sessionManager)
+            {
+                UnsubscribeFromSessionEvents();
+                _sessionManager.StateChanged += OnSessionStateChanged;
+                _sessionManager.SessionReady += OnSessionReady;
+                _sessionManager.SessionFailed += OnSessionFailed;
+                _subscribedSessionManager = _sessionManager;
+            }
         }
         
         private void UnsubscribeFromFileTransferEvents()
@@ -130,9 +217,23 @@ namespace WDCableWUI.UI.FileTransfer
             _subscribedFileTransferService.FileReceived -= OnFileReceived;
             _subscribedFileTransferService.FileReceiveStarted -= OnFileReceiveStarted;
             _subscribedFileTransferService.TransferProgress -= OnTransferProgress;
+            _subscribedFileTransferService.TransferFailed -= OnTransferFailed;
             _subscribedFileTransferService.StatusChanged -= OnFileTransferStatusChanged;
             _subscribedFileTransferService.ErrorOccurred -= OnFileTransferError;
             _subscribedFileTransferService = null;
+        }
+
+        private void UnsubscribeFromSessionEvents()
+        {
+            if (_subscribedSessionManager == null)
+            {
+                return;
+            }
+
+            _subscribedSessionManager.StateChanged -= OnSessionStateChanged;
+            _subscribedSessionManager.SessionReady -= OnSessionReady;
+            _subscribedSessionManager.SessionFailed -= OnSessionFailed;
+            _subscribedSessionManager = null;
         }
 
         protected override void OnNavigatedTo(NavigationEventArgs e)
@@ -148,11 +249,13 @@ namespace WDCableWUI.UI.FileTransfer
             base.OnNavigatedFrom(e);
             // Unsubscribe from events when navigating away
             UnsubscribeFromFileTransferEvents();
+            UnsubscribeFromSessionEvents();
         }
 
         private void OnPageUnloaded(object sender, RoutedEventArgs e)
         {
             UnsubscribeFromFileTransferEvents();
+            UnsubscribeFromSessionEvents();
         }
 
         #region File Selection Events
@@ -201,7 +304,9 @@ namespace WDCableWUI.UI.FileTransfer
          
          private void UpdateSendButtonState()
         {
-            SendFileButton.IsEnabled = _selectedFile != null && _fileTransferService?.IsConnected == true;
+            SendFileButton.IsEnabled = _selectedFile != null &&
+                (_sessionManager?.IsReady ?? false) &&
+                _fileTransferService?.IsConnected == true;
         }
 
         private void RemoveFileButton_Click(object sender, RoutedEventArgs e)
@@ -259,11 +364,7 @@ namespace WDCableWUI.UI.FileTransfer
             {
                 // Disable send button during transfer
                 SendFileButton.IsEnabled = false;
-                
-                // Create transfer record for the outgoing file
-                var properties = await _selectedFile.GetBasicPropertiesAsync();
-                
-                
+
                 // Send the file using the file transfer service
                 await _fileTransferService.SendFileAsync(_selectedFile);
                 
@@ -376,6 +477,50 @@ namespace WDCableWUI.UI.FileTransfer
             {
                 _transferRecords.Clear();
                 _filteredRecords.Clear();
+                _activeTransferRecords.Clear();
+            }
+        }
+
+        private async void TransferRecordsList_ItemClick(object sender, ItemClickEventArgs e)
+        {
+            if (e.ClickedItem is not TransferRecord record || string.IsNullOrWhiteSpace(record.FilePath))
+            {
+                return;
+            }
+
+            try
+            {
+                if (File.Exists(record.FilePath))
+                {
+                    var file = await StorageFile.GetFileFromPathAsync(record.FilePath);
+                    var folderPath = Path.GetDirectoryName(record.FilePath);
+                    if (string.IsNullOrWhiteSpace(folderPath))
+                    {
+                        return;
+                    }
+
+                    var folder = await StorageFolder.GetFolderFromPathAsync(folderPath);
+                    var options = new FolderLauncherOptions();
+                    options.ItemsToSelect.Add(file);
+                    await Launcher.LaunchFolderAsync(folder, options);
+                    return;
+                }
+
+                var directory = Directory.Exists(record.FilePath)
+                    ? record.FilePath
+                    : Path.GetDirectoryName(record.FilePath);
+                if (!string.IsNullOrWhiteSpace(directory) && Directory.Exists(directory))
+                {
+                    var folder = await StorageFolder.GetFolderFromPathAsync(directory);
+                    await Launcher.LaunchFolderAsync(folder);
+                    return;
+                }
+
+                await ShowMessageDialog("File Not Found", "The file location is no longer available.");
+            }
+            catch (Exception ex)
+            {
+                await ShowMessageDialog("Open Location Failed", $"Could not open the file location:\n\n{ex.Message}");
             }
         }
 
@@ -385,50 +530,98 @@ namespace WDCableWUI.UI.FileTransfer
 
         private void OnFileSent(object? sender, FileTransferEventArgs e)
         {
-            
-            var transferRecord = new TransferRecord
-                {
-                    FileName = e.FileName,
-                    Status = "Sent",
-                    TimeStamp = DateTime.Now.ToString("HH:mm"),
-                    TypeIcon = "\uE724", // Send icon
-                    StatusColor = new SolidColorBrush(Colors.Green),
-                    Progress = 0,
-                    ProgressVisibility = Visibility.Visible,
-                    Type = TransferType.Sent
-                };
-                
-                _transferRecords.Insert(0, transferRecord);
-                ApplyFilter();
+            var transferRecord = GetOrCreateTransferRecord(e.TransferId, e.FileName, isSender: true);
+            transferRecord.FileName = e.FileName;
+            transferRecord.FilePath = e.FilePath;
+            transferRecord.Status = "Sent";
+            transferRecord.TimeStamp = DateTime.Now.ToString("HH:mm");
+            transferRecord.StatusColor = new SolidColorBrush(Colors.Green);
+            transferRecord.Progress = 100;
+            transferRecord.ProgressVisibility = Visibility.Visible;
+            _activeTransferRecords.Remove(TransferKey(e.TransferId, e.FileName, isSender: true));
+            ApplyFilter();
         }
 
         private void OnFileReceiveStarted(object? sender, FileReceiveStartedEventArgs e)
-         {
-             
-         }
+        {
+            var transferRecord = GetOrCreateTransferRecord(e.TransferId, e.FileName, isSender: false);
+            transferRecord.FileName = e.FileName;
+            transferRecord.Status = "Receiving";
+            transferRecord.TimeStamp = DateTime.Now.ToString("HH:mm");
+            transferRecord.StatusColor = new SolidColorBrush(Colors.DodgerBlue);
+            transferRecord.Progress = e.FileSize == 0 ? 100 : 0;
+            transferRecord.ProgressVisibility = Visibility.Visible;
+        }
 
         private void OnFileReceived(object? sender, FileTransferEventArgs e)
         {
-            // Find existing transfer record and update it
-            var transferRecord = new TransferRecord
-             {
-                 FileName = e.FileName,
-                 Status = "Received",
-                 TimeStamp = DateTime.Now.ToString("HH:mm"),
-                 TypeIcon = "\uE896", // Receive icon
-                 StatusColor = new SolidColorBrush(Colors.Green),
-                 Progress = 0,
-                 ProgressVisibility = Visibility.Visible,
-                 Type = TransferType.Received
-             };
- 
-             _transferRecords.Insert(0, transferRecord);
-             ApplyFilter();
+            var transferRecord = GetOrCreateTransferRecord(e.TransferId, e.FileName, isSender: false);
+            transferRecord.FileName = e.FileName;
+            transferRecord.FilePath = e.FilePath;
+            transferRecord.Status = "Received";
+            transferRecord.TimeStamp = DateTime.Now.ToString("HH:mm");
+            transferRecord.StatusColor = new SolidColorBrush(Colors.Green);
+            transferRecord.Progress = 100;
+            transferRecord.ProgressVisibility = Visibility.Visible;
+            _activeTransferRecords.Remove(TransferKey(e.TransferId, e.FileName, isSender: false));
+            ApplyFilter();
         }
 
         private void OnTransferProgress(object? sender, FileTransferProgressEventArgs e)
         {
+            var transferRecord = GetOrCreateTransferRecord(e.TransferId, e.FileName, e.IsSender);
+            transferRecord.FileName = e.FileName;
+            transferRecord.Status = e.IsSender ? "Sending" : "Receiving";
+            transferRecord.TimeStamp = DateTime.Now.ToString("HH:mm");
+            transferRecord.StatusColor = new SolidColorBrush(Colors.DodgerBlue);
+            transferRecord.Progress = e.ProgressPercentage;
+            transferRecord.ProgressVisibility = Visibility.Visible;
+        }
 
+        private void OnTransferFailed(object? sender, FileTransferFailedEventArgs e)
+        {
+            var transferRecord = GetOrCreateTransferRecord(e.TransferId, e.FileName, e.IsSender);
+            transferRecord.FileName = e.FileName;
+            transferRecord.FilePath = string.Empty;
+            transferRecord.Status = "Failed";
+            transferRecord.TimeStamp = DateTime.Now.ToString("HH:mm");
+            transferRecord.StatusColor = new SolidColorBrush(Colors.Firebrick);
+            transferRecord.ProgressVisibility = Visibility.Visible;
+            _activeTransferRecords.Remove(TransferKey(e.TransferId, e.FileName, e.IsSender));
+            ApplyFilter();
+        }
+
+        private TransferRecord GetOrCreateTransferRecord(string transferId, string fileName, bool isSender)
+        {
+            var key = TransferKey(transferId, fileName, isSender);
+            if (_activeTransferRecords.TryGetValue(key, out var existing))
+            {
+                return existing;
+            }
+
+            var record = new TransferRecord
+            {
+                TransferId = transferId,
+                FileName = fileName,
+                Status = isSender ? "Sending" : "Receiving",
+                TimeStamp = DateTime.Now.ToString("HH:mm"),
+                TypeIcon = isSender ? "\uE724" : "\uE896",
+                StatusColor = new SolidColorBrush(Colors.DodgerBlue),
+                Progress = 0,
+                ProgressVisibility = Visibility.Visible,
+                Type = isSender ? TransferType.Sent : TransferType.Received
+            };
+
+            _activeTransferRecords[key] = record;
+            _transferRecords.Insert(0, record);
+            ApplyFilter();
+            return record;
+        }
+
+        private static string TransferKey(string transferId, string fileName, bool isSender)
+        {
+            var id = string.IsNullOrWhiteSpace(transferId) ? fileName : transferId;
+            return $"{(isSender ? "send" : "receive")}:{id}";
         }
 
         private void OnFileTransferStatusChanged(object? sender, string status)
@@ -441,6 +634,21 @@ namespace WDCableWUI.UI.FileTransfer
         {
             // Handle errors
             _ = ShowMessageDialog("Transfer Error", error);
+        }
+
+        private void OnSessionStateChanged(object? sender, SessionStateChangedEventArgs e)
+        {
+            DispatcherQueue.TryEnqueue(UpdateSendButtonState);
+        }
+
+        private void OnSessionReady(object? sender, SessionReadyEventArgs e)
+        {
+            DispatcherQueue.TryEnqueue(UpdateSendButtonState);
+        }
+
+        private void OnSessionFailed(object? sender, SessionFailedEventArgs e)
+        {
+            DispatcherQueue.TryEnqueue(UpdateSendButtonState);
         }
 
         #endregion

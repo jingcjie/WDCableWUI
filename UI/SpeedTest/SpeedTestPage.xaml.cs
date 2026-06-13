@@ -22,6 +22,8 @@ namespace WDCableWUI.UI.SpeedTest
         private SpeedTestService? _subscribedSpeedTestService;
         private ConnectionService? _connectionService;
         private ConnectionService? _subscribedConnectionService;
+        private SessionManager? _sessionManager;
+        private SessionManager? _subscribedSessionManager;
         private readonly DataManager _dataManager;
 
         public event PropertyChangedEventHandler? PropertyChanged;
@@ -64,14 +66,16 @@ namespace WDCableWUI.UI.SpeedTest
         {
             try
             {
-                _speedTestService = ServiceManager.IsInitialized ? ServiceManager.SpeedTestService : null;
-                _connectionService = ServiceManager.IsInitialized ? ServiceManager.ConnectionService : null;
+                _speedTestService = ServiceManager.AreWiFiDirectServicesAvailable ? ServiceManager.SpeedTestService : null;
+                _connectionService = ServiceManager.AreWiFiDirectServicesAvailable ? ServiceManager.ConnectionService : null;
+                _sessionManager = ServiceManager.AreWiFiDirectServicesAvailable ? ServiceManager.SessionManager : null;
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"Failed to initialize services in SpeedTestPage: {ex.Message}");
                 _speedTestService = null;
                 _connectionService = null;
+                _sessionManager = null;
             }
         }
 
@@ -85,6 +89,7 @@ namespace WDCableWUI.UI.SpeedTest
                 _speedTestService.ErrorOccurred += OnSpeedTestErrorOccurred;
                 _speedTestService.UploadCompleted += OnSpeedTestCompleted;
                 _speedTestService.DownloadCompleted += OnSpeedTestCompleted;
+                _speedTestService.ProgressChanged += OnSpeedTestProgressChanged;
                 _subscribedSpeedTestService = _speedTestService;
             }
 
@@ -95,12 +100,23 @@ namespace WDCableWUI.UI.SpeedTest
                 _connectionService.StatusChanged += OnConnectionStatusChanged;
                 _subscribedConnectionService = _connectionService;
             }
+
+            if (_sessionManager != null && _subscribedSessionManager != _sessionManager)
+            {
+                UnsubscribeFromSessionEvents();
+
+                _sessionManager.StateChanged += OnSessionStateChanged;
+                _sessionManager.SessionReady += OnSessionReady;
+                _sessionManager.SessionFailed += OnSessionFailed;
+                _subscribedSessionManager = _sessionManager;
+            }
         }
 
         private void UnsubscribeFromServiceEvents()
         {
             UnsubscribeFromSpeedTestEvents();
             UnsubscribeFromConnectionEvents();
+            UnsubscribeFromSessionEvents();
         }
 
         private void UnsubscribeFromSpeedTestEvents()
@@ -114,6 +130,7 @@ namespace WDCableWUI.UI.SpeedTest
             _subscribedSpeedTestService.ErrorOccurred -= OnSpeedTestErrorOccurred;
             _subscribedSpeedTestService.UploadCompleted -= OnSpeedTestCompleted;
             _subscribedSpeedTestService.DownloadCompleted -= OnSpeedTestCompleted;
+            _subscribedSpeedTestService.ProgressChanged -= OnSpeedTestProgressChanged;
             _subscribedSpeedTestService = null;
         }
 
@@ -126,6 +143,19 @@ namespace WDCableWUI.UI.SpeedTest
 
             _subscribedConnectionService.StatusChanged -= OnConnectionStatusChanged;
             _subscribedConnectionService = null;
+        }
+
+        private void UnsubscribeFromSessionEvents()
+        {
+            if (_subscribedSessionManager == null)
+            {
+                return;
+            }
+
+            _subscribedSessionManager.StateChanged -= OnSessionStateChanged;
+            _subscribedSessionManager.SessionReady -= OnSessionReady;
+            _subscribedSessionManager.SessionFailed -= OnSessionFailed;
+            _subscribedSessionManager = null;
         }
 
         private void OnPageUnloaded(object sender, RoutedEventArgs e)
@@ -193,7 +223,56 @@ namespace WDCableWUI.UI.SpeedTest
             });
         }
 
+        private void OnSpeedTestProgressChanged(object? sender, SpeedTestProgressEventArgs e)
+        {
+            _dispatcherQueue.TryEnqueue(() =>
+            {
+                var progress = Math.Min(100, Math.Max(0, e.ProgressPercentage));
+                if (e.TestType == SpeedTestType.Upload)
+                {
+                    UploadProgressBar.Visibility = Visibility.Visible;
+                    UploadProgressBar.IsIndeterminate = false;
+                    UploadProgressBar.Value = progress;
+                    UploadSpeedText.Text = e.SpeedMbps.ToString("F2");
+                }
+                else
+                {
+                    DownloadProgressBar.Visibility = Visibility.Visible;
+                    DownloadProgressBar.IsIndeterminate = false;
+                    DownloadProgressBar.Value = progress;
+                    DownloadSpeedText.Text = e.SpeedMbps.ToString("F2");
+                }
+            });
+        }
+
         private void OnConnectionStatusChanged(object? sender, string status)
+        {
+            _dispatcherQueue.TryEnqueue(() =>
+            {
+                UpdateConnectionStatus();
+                UpdateTestButtonStates();
+            });
+        }
+
+        private void OnSessionStateChanged(object? sender, SessionStateChangedEventArgs e)
+        {
+            _dispatcherQueue.TryEnqueue(() =>
+            {
+                UpdateConnectionStatus();
+                UpdateTestButtonStates();
+            });
+        }
+
+        private void OnSessionReady(object? sender, SessionReadyEventArgs e)
+        {
+            _dispatcherQueue.TryEnqueue(() =>
+            {
+                UpdateConnectionStatus();
+                UpdateTestButtonStates();
+            });
+        }
+
+        private void OnSessionFailed(object? sender, SessionFailedEventArgs e)
         {
             _dispatcherQueue.TryEnqueue(() =>
             {
@@ -206,22 +285,39 @@ namespace WDCableWUI.UI.SpeedTest
         {
             try
             {
-                bool isConnected = _connectionService?.IsConnected ?? false;
-                bool hasSpeedTestConnection = _speedTestService?.IsConnected ?? false;
-                
-                if (isConnected && hasSpeedTestConnection)
-                {
-                    ConnectionIcon.Glyph = "\uE774"; // Connected icon
-                    ConnectionIcon.Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["SystemFillColorSuccessBrush"];
-                    ConnectionStatusText.Text = "Connected";
-                    ConnectionDetailsText.Text = "Speed test connection is ready";
-                }
-                else if (isConnected)
+                if (!ServiceManager.AreWiFiDirectServicesAvailable)
                 {
                     ConnectionIcon.Glyph = "\uE783"; // Warning icon
                     ConnectionIcon.Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["SystemFillColorCautionBrush"];
-                    ConnectionStatusText.Text = "Partially Connected";
-                    ConnectionDetailsText.Text = "Main connection established, speed test connection pending";
+                    ConnectionStatusText.Text = "WiFi Direct unavailable";
+                    ConnectionDetailsText.Text = ServiceManager.ServiceUnavailableMessage;
+                    return;
+                }
+
+                bool wifiLinked = ServiceManager.IsConnected;
+                bool appReady = _sessionManager?.IsReady ?? false;
+                bool hasSpeedTestConnection = _speedTestService?.IsConnected ?? false;
+                
+                if (appReady && hasSpeedTestConnection)
+                {
+                    ConnectionIcon.Glyph = "\uE774"; // Connected icon
+                    ConnectionIcon.Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["SystemFillColorSuccessBrush"];
+                    ConnectionStatusText.Text = "Ready";
+                    ConnectionDetailsText.Text = "Speed test connection is ready";
+                }
+                else if (appReady)
+                {
+                    ConnectionIcon.Glyph = "\uE783"; // Warning icon
+                    ConnectionIcon.Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["SystemFillColorCautionBrush"];
+                    ConnectionStatusText.Text = "Session Ready";
+                    ConnectionDetailsText.Text = "Speed test service is waiting for the bulk channel";
+                }
+                else if (wifiLinked)
+                {
+                    ConnectionIcon.Glyph = "\uE783"; // Warning icon
+                    ConnectionIcon.Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["SystemFillColorCautionBrush"];
+                    ConnectionStatusText.Text = "WiFi Linked";
+                    ConnectionDetailsText.Text = "Waiting for WDCable session handshake";
                 }
                 else
                 {
@@ -242,13 +338,15 @@ namespace WDCableWUI.UI.SpeedTest
 
         private void UpdateTestButtonStates()
         {
-            bool canTest = (_connectionService?.IsConnected ?? false) && (_speedTestService?.IsConnected ?? false);
+            bool appReady = _sessionManager?.IsReady ?? false;
+            bool canTest = appReady && (_speedTestService?.IsConnected ?? false);
+            bool canChooseTest = ServiceManager.AreWiFiDirectServicesAvailable && appReady && !_isUploadTestRunning && !_isDownloadTestRunning;
             
             StartUploadButton.IsEnabled = canTest && !_isUploadTestRunning && !_isDownloadTestRunning;
             StartDownloadButton.IsEnabled = canTest && !_isDownloadTestRunning && !_isUploadTestRunning;
             
-            UploadSizeComboBox.IsEnabled = !_isUploadTestRunning && !_isDownloadTestRunning;
-            DownloadSizeComboBox.IsEnabled = !_isUploadTestRunning && !_isDownloadTestRunning;
+            UploadSizeComboBox.IsEnabled = canChooseTest;
+            DownloadSizeComboBox.IsEnabled = canChooseTest;
             
             // Update button content
             StartUploadButton.Content = _isUploadTestRunning ? "Testing..." : "Start Upload Test";
@@ -303,7 +401,8 @@ namespace WDCableWUI.UI.SpeedTest
                 
                 // Show progress bar
                 UploadProgressBar.Visibility = Visibility.Visible;
-                UploadProgressBar.IsIndeterminate = true;
+                UploadProgressBar.IsIndeterminate = false;
+                UploadProgressBar.Value = 0;
                 
                 try
                 {
@@ -348,7 +447,8 @@ namespace WDCableWUI.UI.SpeedTest
                 
                 // Show progress bar
                 DownloadProgressBar.Visibility = Visibility.Visible;
-                DownloadProgressBar.IsIndeterminate = true;
+                DownloadProgressBar.IsIndeterminate = false;
+                DownloadProgressBar.Value = 0;
                 
                 try
                 {

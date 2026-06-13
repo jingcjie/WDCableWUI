@@ -283,7 +283,9 @@
                                  Background="{ThemeResource ControlFillColorDefaultBrush}"
                                  CornerRadius="4"
                                  Padding="8"
-                                 MinHeight="300">
+                                 MinHeight="300"
+                                 IsItemClickEnabled="True"
+                                 ItemClick="TransferRecordsList_ItemClick">
                             <ListView.ItemTemplate>
                                 <DataTemplate>
                                     <Border Background="{ThemeResource SubtleFillColorTransparentBrush}"

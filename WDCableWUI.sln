@@ -5,6 +5,8 @@ VisualStudioVersion = 17.14.36310.24
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WDCableWUI", "WDCableWUI.csproj", "{D9EADE62-C8C9-4B1B-A4C1-F596149A1147}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WDCableWUI.Tests", "WDCableWUI.Tests\WDCableWUI.Tests.csproj", "{64B8C3DD-5F00-4F72-B18B-BDA94712D557}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|ARM64 = Debug|ARM64
@@ -33,6 +35,18 @@ Global
 		{D9EADE62-C8C9-4B1B-A4C1-F596149A1147}.Release|x86.ActiveCfg = Release|x86
 		{D9EADE62-C8C9-4B1B-A4C1-F596149A1147}.Release|x86.Build.0 = Release|x86
 		{D9EADE62-C8C9-4B1B-A4C1-F596149A1147}.Release|x86.Deploy.0 = Release|x86
+		{64B8C3DD-5F00-4F72-B18B-BDA94712D557}.Debug|ARM64.ActiveCfg = Debug|Any CPU
+		{64B8C3DD-5F00-4F72-B18B-BDA94712D557}.Debug|ARM64.Build.0 = Debug|Any CPU
+		{64B8C3DD-5F00-4F72-B18B-BDA94712D557}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{64B8C3DD-5F00-4F72-B18B-BDA94712D557}.Debug|x64.Build.0 = Debug|Any CPU
+		{64B8C3DD-5F00-4F72-B18B-BDA94712D557}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{64B8C3DD-5F00-4F72-B18B-BDA94712D557}.Debug|x86.Build.0 = Debug|Any CPU
+		{64B8C3DD-5F00-4F72-B18B-BDA94712D557}.Release|ARM64.ActiveCfg = Release|Any CPU
+		{64B8C3DD-5F00-4F72-B18B-BDA94712D557}.Release|ARM64.Build.0 = Release|Any CPU
+		{64B8C3DD-5F00-4F72-B18B-BDA94712D557}.Release|x64.ActiveCfg = Release|Any CPU
+		{64B8C3DD-5F00-4F72-B18B-BDA94712D557}.Release|x64.Build.0 = Release|Any CPU
+		{64B8C3DD-5F00-4F72-B18B-BDA94712D557}.Release|x86.ActiveCfg = Release|Any CPU
+		{64B8C3DD-5F00-4F72-B18B-BDA94712D557}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -23,6 +23,7 @@ namespace WDCableWUI
     public sealed partial class MainWindow : Window
     {
         private readonly Dictionary<string, Type> _pageTypes;
+        private SessionManager? _subscribedSessionManager;
         
         public MainWindow()
         {
@@ -52,9 +53,16 @@ namespace WDCableWUI
             PageTitle.Text = GetLocalizedPageTitle("Connection");
             
             // Initialize status
-            UpdateConnectionStatus(false);
+            if (ServiceManager.AreWiFiDirectServicesAvailable)
+            {
+                UpdateConnectionStatus(false);
+            }
+            else
+            {
+                UpdateServiceUnavailableStatus();
+            }
             
-            // Subscribe to WiFiDirectService events
+            // Subscribe to WiFiDirect/session events
             SubscribeToWiFiDirectEvents();
         }
         
@@ -123,15 +131,21 @@ namespace WDCableWUI
         {
             try
             {
-                if (ServiceManager.IsInitialized && ServiceManager.WiFiDirectService != null)
+                var wifiDirectService = ServiceManager.WiFiDirectService;
+                if (ServiceManager.AreWiFiDirectServicesAvailable && wifiDirectService != null)
                 {
-                    ServiceManager.WiFiDirectService.DeviceConnected += OnWiFiDirectDeviceConnected;
-                    ServiceManager.WiFiDirectService.DeviceDisconnected += OnWiFiDirectDeviceDisconnected;
+                    wifiDirectService.DeviceConnected += OnWiFiDirectDeviceConnected;
+                    wifiDirectService.DeviceDisconnected += OnWiFiDirectDeviceDisconnected;
                 }
                 
-                if (ServiceManager.IsInitialized && ServiceManager.ConnectionService != null)
+                var sessionManager = ServiceManager.SessionManager;
+                if (ServiceManager.AreWiFiDirectServicesAvailable && sessionManager != null)
                 {
-                    ServiceManager.ConnectionService.OtherSideNotRunningApp += OnOtherSideNotRunningApp;
+                    sessionManager.StateChanged += OnSessionStateChanged;
+                    sessionManager.SessionReady += OnSessionReady;
+                    sessionManager.SessionFailed += OnSessionFailed;
+                    sessionManager.PeerProtocolMissing += OnPeerProtocolMissing;
+                    _subscribedSessionManager = sessionManager;
                 }
             }
             catch (Exception ex)
@@ -145,7 +159,7 @@ namespace WDCableWUI
             // Ensure UI updates happen on the UI thread
             DispatcherQueue.TryEnqueue(() =>
             {
-                UpdateConnectionStatus(true, device?.Name ?? "");
+                UpdateWiFiDirectLinkedStatus(device?.Name ?? "");
             });
         }
         
@@ -175,20 +189,82 @@ namespace WDCableWUI
                 DeviceInfo.Text = "No device connected";
             }
         }
+
+        private void UpdateWiFiDirectLinkedStatus(string deviceName = "")
+        {
+            ConnectionStatusIcon.Glyph = "\uE783"; // Warning
+            ConnectionStatusIcon.Foreground = (SolidColorBrush)Application.Current.Resources["SystemFillColorCautionBrush"];
+            ConnectionStatusText.Text = "WiFi Linked";
+            DeviceInfo.Text = !string.IsNullOrEmpty(deviceName) ? $"WiFi Direct linked to {deviceName}" : "WiFi Direct linked";
+            StatusMessage.Text = "Negotiating WDCable session";
+        }
+
+        private void UpdateSessionReadyStatus(SessionReadyEventArgs e)
+        {
+            ConnectionStatusIcon.Glyph = "\uE8FB"; // CheckMark
+            ConnectionStatusIcon.Foreground = (SolidColorBrush)Application.Current.Resources["SystemFillColorSuccessBrush"];
+            ConnectionStatusText.Text = "Ready";
+            DeviceInfo.Text = !string.IsNullOrEmpty(e.PeerName) ? $"Ready with {e.PeerName}" : "WDCable session ready";
+            StatusMessage.Text = $"WDCable protocol v{e.ProtocolVersion} ready";
+        }
+
+        private void UpdateSessionPhaseStatus(SessionStateChangedEventArgs e)
+        {
+            if (e.Phase == SessionPhase.Ready || e.Phase == SessionPhase.Disconnected)
+            {
+                return;
+            }
+
+            ConnectionStatusIcon.Glyph = "\uE783"; // Warning
+            ConnectionStatusIcon.Foreground = (SolidColorBrush)Application.Current.Resources["SystemFillColorCautionBrush"];
+            ConnectionStatusText.Text = e.StateName;
+            DeviceInfo.Text = !string.IsNullOrEmpty(e.PeerName) ? e.PeerName : "WiFi Direct peer linked";
+            StatusMessage.Text = e.Phase switch
+            {
+                SessionPhase.WifiDirectConnected => "WiFi Direct linked; starting WDCable session",
+                SessionPhase.ConnectingTransport => "Opening WDCable transport channels",
+                SessionPhase.Handshaking => "Negotiating WDCable protocol",
+                SessionPhase.Failed => e.DisconnectReason ?? "WDCable session failed",
+                _ => e.StateName
+            };
+        }
+
+        private void UpdateSessionFailedStatus(SessionFailedEventArgs e)
+        {
+            ConnectionStatusIcon.Glyph = "\uE783"; // Warning
+            ConnectionStatusIcon.Foreground = (SolidColorBrush)Application.Current.Resources["SystemFillColorCautionBrush"];
+            ConnectionStatusText.Text = "Protocol failed";
+            DeviceInfo.Text = e.Reason;
+            StatusMessage.Text = e.Message;
+        }
+
+        private void UpdateServiceUnavailableStatus()
+        {
+            ConnectionStatusIcon.Glyph = "\uE783"; // Warning
+            ConnectionStatusIcon.Foreground = (SolidColorBrush)Application.Current.Resources["SystemFillColorCautionBrush"];
+            ConnectionStatusText.Text = "WiFi Direct unavailable";
+            DeviceInfo.Text = "Settings remain available";
+            StatusMessage.Text = ServiceManager.ServiceUnavailableMessage;
+        }
         
         private void UnsubscribeFromWiFiDirectEvents()
         {
             try
             {
-                if (ServiceManager.IsInitialized && ServiceManager.WiFiDirectService != null)
+                var wifiDirectService = ServiceManager.WiFiDirectService;
+                if (wifiDirectService != null)
                 {
-                    ServiceManager.WiFiDirectService.DeviceConnected -= OnWiFiDirectDeviceConnected;
-                    ServiceManager.WiFiDirectService.DeviceDisconnected -= OnWiFiDirectDeviceDisconnected;
+                    wifiDirectService.DeviceConnected -= OnWiFiDirectDeviceConnected;
+                    wifiDirectService.DeviceDisconnected -= OnWiFiDirectDeviceDisconnected;
                 }
                 
-                if (ServiceManager.IsInitialized && ServiceManager.ConnectionService != null)
+                if (_subscribedSessionManager != null)
                 {
-                    ServiceManager.ConnectionService.OtherSideNotRunningApp -= OnOtherSideNotRunningApp;
+                    _subscribedSessionManager.StateChanged -= OnSessionStateChanged;
+                    _subscribedSessionManager.SessionReady -= OnSessionReady;
+                    _subscribedSessionManager.SessionFailed -= OnSessionFailed;
+                    _subscribedSessionManager.PeerProtocolMissing -= OnPeerProtocolMissing;
+                    _subscribedSessionManager = null;
                 }
             }
             catch (Exception ex)
@@ -197,11 +273,27 @@ namespace WDCableWUI
             }
         }
         
-        private void OnOtherSideNotRunningApp(object? sender, EventArgs e)
+        private void OnSessionStateChanged(object? sender, SessionStateChangedEventArgs e)
+        {
+            DispatcherQueue.TryEnqueue(() => UpdateSessionPhaseStatus(e));
+        }
+
+        private void OnSessionReady(object? sender, SessionReadyEventArgs e)
+        {
+            DispatcherQueue.TryEnqueue(() => UpdateSessionReadyStatus(e));
+        }
+
+        private void OnSessionFailed(object? sender, SessionFailedEventArgs e)
+        {
+            DispatcherQueue.TryEnqueue(() => UpdateSessionFailedStatus(e));
+        }
+
+        private void OnPeerProtocolMissing(object? sender, SessionFailedEventArgs e)
         {
             // Ensure UI updates happen on the UI thread
             DispatcherQueue.TryEnqueue(async () =>
             {
+                UpdateSessionFailedStatus(e);
                 await ShowOtherSideNotRunningAppDialog();
             });
         }

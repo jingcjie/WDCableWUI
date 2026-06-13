@@ -53,27 +53,29 @@ namespace WDCableWUI.UI.Connection
             try
             {
                 UnsubscribeFromWiFiDirectEvents();
+                _isInitialized = false;
 
                 // Get the singleton WiFiDirectService from ServiceManager with null checks
-                _wifiDirectService = ServiceManager.IsInitialized ? ServiceManager.WiFiDirectService : null;
+                _wifiDirectService = ServiceManager.AreWiFiDirectServicesAvailable ? ServiceManager.WiFiDirectService : null;
                 
                 if (_wifiDirectService != null)
                 {
                     // Bind device list to ListView
                     DeviceListView.ItemsSource = _wifiDirectService.DiscoveredDevices;
+                    DeviceListView.IsEnabled = true;
+                    DiscoverableToggle.IsEnabled = true;
+                    LastStatusText.Text = "WiFi Direct service ready";
                     _isInitialized = true;
                 }
                 else
                 {
-                    // Service not available, show appropriate message
-                    ShowError("WiFi Direct service is not available. Some features may not work.");
+                    ApplyUnavailableState(ServiceManager.ServiceUnavailableMessage);
                 }
             }
             catch (Exception ex)
             {
-                ShowError($"Failed to initialize WiFi Direct service: {ex.Message}");
                 _wifiDirectService = null;
-                _isInitialized = false;
+                ApplyUnavailableState($"Failed to initialize WiFi Direct service: {ex.Message}");
             }
         }
 
@@ -289,8 +291,7 @@ namespace WDCableWUI.UI.Connection
         private void OnDeviceConnected(object? sender, WiFiDirectDevice device)
         {
             _dispatcherQueue.TryEnqueue(() => {
-                UpdateConnectionStatus($"Connected to {device.Name}", 
-                    _wifiDirectService?.IsGroupOwner == true ? "Group Owner" : "Client");
+                UpdateConnectionStatus($"Connected to {device.Name}", GetRoleDiagnostics());
                 DisconnectButton.IsEnabled = true;
                 
                 // Stop scanning when connected
@@ -314,11 +315,11 @@ namespace WDCableWUI.UI.Connection
         private void OnStatusChanged(object? sender, string status)
         {
             _dispatcherQueue.TryEnqueue(() => {
-                // You could add a status bar or notification here
-                // For now, we'll just update the connection status if it's a connection-related message
-                if (status.Contains("Group Owner") || status.Contains("Client"))
+                LastStatusText.Text = status;
+                if (_wifiDirectService?.IsConnected == true &&
+                    (status.Contains("Role") || status.Contains("endpoint") || status.Contains("Connected")))
                 {
-                    DeviceRoleText.Text = status;
+                    DeviceRoleText.Text = GetRoleDiagnostics();
                 }
             });
         }
@@ -326,6 +327,7 @@ namespace WDCableWUI.UI.Connection
         private void OnErrorOccurred(object? sender, string error)
         {
             _dispatcherQueue.TryEnqueue(() => {
+                LastStatusText.Text = error;
                 ShowError(error);
             });
         }
@@ -353,7 +355,11 @@ namespace WDCableWUI.UI.Connection
 
         private void UpdateUI()
         {
-            if (!_isInitialized) return;
+            if (!_isInitialized)
+            {
+                ApplyUnavailableState(ServiceManager.ServiceUnavailableMessage);
+                return;
+            }
 
             // Update button states based on current service state
             ScanButton.IsEnabled = !(_wifiDirectService?.IsScanning ?? false);
@@ -365,7 +371,7 @@ namespace WDCableWUI.UI.Connection
             if (_wifiDirectService?.IsConnected == true)
             {
                 UpdateConnectionStatus($"Connected to {_wifiDirectService?.ConnectedDevice?.Name}",
-                    _wifiDirectService?.IsGroupOwner == true ? "Group Owner" : "Client");
+                    GetRoleDiagnostics());
             }
             else
             {
@@ -375,6 +381,26 @@ namespace WDCableWUI.UI.Connection
             // Update empty state visibility
             EmptyStatePanel.Visibility = (_wifiDirectService?.DiscoveredDevices.Count ?? 0) == 0 ? 
                 Visibility.Visible : Visibility.Collapsed;
+        }
+
+        private void ApplyUnavailableState(string message)
+        {
+            _isInitialized = false;
+            DeviceListView.ItemsSource = null;
+            DeviceListView.IsEnabled = false;
+            DiscoverableToggle.IsOn = false;
+            DiscoverableToggle.IsEnabled = false;
+            ScanButton.IsEnabled = false;
+            StopScanButton.IsEnabled = false;
+            DisconnectButton.IsEnabled = false;
+            EmptyStatePanel.Visibility = Visibility.Visible;
+            LastStatusText.Text = message;
+            UpdateConnectionStatus("WiFi Direct unavailable", message);
+        }
+
+        private string GetRoleDiagnostics()
+        {
+            return _wifiDirectService?.EndpointDiagnostics ?? string.Empty;
         }
 
         private void OnPageUnloaded(object sender, RoutedEventArgs e)
