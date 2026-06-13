@@ -319,11 +319,6 @@ public sealed class SessionManager : IDisposable
 
                 openedTransports[channel] = transport;
                 EmitStatus($"{channel.GetProtocolName()} channel opened on port {port}");
-
-                if (channel == ProtocolChannel.Realtime)
-                {
-                    EmitStatus("Realtime channel opened as no-op compatibility transport.");
-                }
             }
 
             var runtime = new SessionRuntime(expectedGeneration, link, openedTransports);
@@ -916,8 +911,7 @@ public sealed class SessionManager : IDisposable
         return
         [
             (ProtocolChannel.Control, ProtocolConstants.DefaultControlPort),
-            (ProtocolChannel.Bulk, ProtocolConstants.DefaultBulkPort),
-            (ProtocolChannel.Realtime, ProtocolConstants.DefaultRealtimePort)
+            (ProtocolChannel.Bulk, ProtocolConstants.DefaultBulkPort)
         ];
     }
 

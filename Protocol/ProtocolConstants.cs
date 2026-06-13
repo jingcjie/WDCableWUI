@@ -12,7 +12,6 @@ public static class ProtocolConstants
 
     public const int DefaultControlPort = 8988;
     public const int DefaultBulkPort = 8989;
-    public const int DefaultRealtimePort = 8990;
 
     public const string CapabilityChat = "control.chat";
     public const string CapabilityBulkFile = "bulk.file";

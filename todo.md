@@ -13,15 +13,7 @@ The Wi-Fi Direct layer is already well tested and should be kept unless a specif
 - `WiFiDirectService.cs` handles advertising, scanning, connection requests, connect/disconnect, endpoint inspection, and role inference.
 - `ConnectionPage.xaml.cs` drives most user-facing Wi-Fi Direct actions.
 
-The part to replace is everything after Wi-Fi Direct creates the network link:
-
-- `ConnectionService.cs` owns three raw TCP channels.
-- Chat uses port `8888`.
-- Speed test uses port `8889`.
-- File transfer uses port `8890`.
-- `ChatService.cs`, `SpeedTestService.cs`, and `FileTransferService.cs` parse and write ad hoc string headers directly on sockets.
-
-That raw socket feature design is the source of fragility and future upgrade cost. The rewrite should replace it directly. Do not support the previous wire protocol and do not keep duplicate feature paths.
+The retired post-link design has been removed from the live feature path. The upgraded Windows path now uses the session runtime for chat, file transfer, speed test, handshake, heartbeat, and teardown. Do not support previous wire formats and do not keep duplicate feature paths.
 
 ## Completed / Historical Work
 
@@ -29,7 +21,7 @@ That raw socket feature design is the source of fragility and future upgrade cos
 - W-02 startup/service safety may be partly represented in current code. Verify before relying on it.
 - W-03 Windows Wi-Fi Direct lifecycle/diagnostic work is considered implemented, but manual testing was not good enough. Treat it as useful cleanup, not proof that the current socket transport is stable.
 - Android has already moved to the upgraded protocol/session runtime for control-channel chat, bulk file transfer, bulk speed test, diagnostics export, and Android-to-Android manual flow tested as generally good. Windows should now match that approach for cross-platform interop.
-- Streaming is dropped from this phase. Do not implement audio/video/screen streaming, microphone capture, playback, jitter buffers, or streaming UI. If the current Android protocol still requires a `realtime` transport to reach `Ready`, Windows may mirror it only as a no-op compatibility channel.
+- Streaming is dropped from this phase. Do not implement media streaming, microphone capture, playback, jitter buffers, streaming UI, media channels, or media capabilities.
 
 ## Target Architecture
 
@@ -45,23 +37,22 @@ Target channels:
 
 - `control`: reliable small messages such as handshake, heartbeat, close, error, chat, command, ack, and feature control messages.
 - `bulk`: reliable large ordered payloads such as file transfer, speed-test payloads, and diagnostics export.
-- `realtime`: reserved/no-op only if needed for compatibility with the current Android protocol scaffolding. Do not send feature traffic on it in this phase.
 
 Streaming scope:
 
 - No streaming implementation work is scheduled.
 - Do not add microphone capture, audio playback, codecs, sender pacing, jitter buffers, or streaming controls.
-- A no-op `realtime` transport is allowed only if required to interoperate with the currently built Android protocol.
+- Do not add media transport or media capability scaffolding.
 
 ## Important Source Map
 
 Services:
 
 - `Services/WiFiDirectService.cs`: Windows Wi-Fi Direct lifecycle.
-- `Services/ConnectionService.cs`: current raw socket owner. Replace it with the session runtime.
-- `Services/ChatService.cs`: current chat protocol. Replace its socket path.
-- `Services/SpeedTestService.cs`: current speed protocol. Replace its socket path.
-- `Services/FileTransferService.cs`: current file protocol. Replace its socket path.
+- `Services/ConnectionService.cs`: compatibility facade over the session runtime for older page event subscriptions.
+- `Services/ChatService.cs`: session-backed chat.
+- `Services/SpeedTestService.cs`: session-backed speed test.
+- `Services/FileTransferService.cs`: session-backed file transfer.
 - `Services/ServiceManager.cs`: service bootstrap.
 - `Services/DataManager.cs`: local settings and persistence.
 
@@ -90,7 +81,7 @@ Build/config:
 - If `../PROTOCOL.md` exists, follow it. If it does not exist and W-A is the current task, create it.
 - Do not add feature-level socket reads/writes. All app features should call the session API.
 - Do not support previous builds at the protocol layer. When a feature is migrated, delete or disconnect its old socket path.
-- Do not implement streaming features in Windows. Any `realtime` channel work is no-op compatibility only unless a later product decision explicitly reopens streaming.
+- Do not implement streaming features in Windows.
 
 ## Standard Verification Commands
 
@@ -142,9 +133,9 @@ Codex work:
   - frame header size
   - max metadata bytes
   - max payload bytes per frame
-  - channel names: `control`, `bulk`, and optional no-op `realtime` only if Android compatibility requires it
+  - channel names: `control` and `bulk`
   - frame type names/ids
-  - capability strings: `control.chat`, `bulk.file`, `bulk.speed`, `diagnostics.export`; no new realtime/audio feature capability
+  - capability strings: `control.chat`, `bulk.file`, `bulk.speed`, `diagnostics.export`
 - [x] Add C# protocol classes in a focused namespace, for example:
   - `ProtocolFrame`
   - `ProtocolFrameType`
@@ -189,7 +180,6 @@ Codex work:
   - peer info
   - role
   - control/bulk sockets or channels
-  - optional no-op realtime socket/channel only if current Android interop requires it
   - accept/connect retries
   - handshake
   - heartbeat
@@ -212,7 +202,7 @@ Codex work:
   - `Disconnecting`
   - `Disconnected`
   - `Failed`
-- [x] Implement handshake with app id, protocol min/max, platform, app version, device name, role, session id, capabilities, and port/channel map. Advertise chat/file/speed/diagnostics; do not advertise realtime/audio as a feature.
+- [x] Implement handshake with app id, protocol min/max, platform, app version, device name, role, session id, capabilities, and port/channel map. Advertise chat/file/speed/diagnostics only.
 - [x] Implement heartbeat and timeout.
 - [x] Make cleanup idempotent.
 - [x] Treat duplicate/stale Wi-Fi Direct connection callbacks for the same peer/role as idempotent; do not tear down a healthy session just because Windows reports the same link again.
@@ -302,8 +292,8 @@ Codex work:
   - unknown file size is `-1`
   - duplicate filenames are saved safely
   - completion is determined by `bulk.complete`; completion ack is diagnostic/best-effort, not required for sender success
-- [x] Remove delimiter-sensitive `FILE:name:size` parsing from the live path.
-- [x] Remove `SPEED_TEST_*` string headers from the live path.
+- [x] Remove delimiter-sensitive file header parsing from the live path.
+- [x] Remove speed-test string headers from the live path.
 - [x] Update Windows transfer/speed UI from protocol progress events.
 - [x] Ensure `FileTransferPage` shows determinate progress.
 - [x] Run `dotnet build WDCableWUI.sln`.
@@ -340,7 +330,6 @@ Codex work:
   - protocol
   - control
   - bulk
-  - reserved realtime/no-op transport if present
   - chat
   - file
   - speed

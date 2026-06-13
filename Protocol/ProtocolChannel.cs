@@ -3,8 +3,7 @@ namespace WDCableWUI.Protocol;
 public enum ProtocolChannel
 {
     Control = 1,
-    Bulk = 2,
-    Realtime = 3
+    Bulk = 2
 }
 
 public static class ProtocolChannelExtensions
@@ -15,7 +14,6 @@ public static class ProtocolChannelExtensions
         {
             ProtocolChannel.Control => "control",
             ProtocolChannel.Bulk => "bulk",
-            ProtocolChannel.Realtime => "realtime",
             _ => throw new ProtocolException(ProtocolError.InvalidChannel, $"Unknown protocol channel id: {(int)channel}")
         };
     }
@@ -26,7 +24,6 @@ public static class ProtocolChannelExtensions
         {
             1 => ProtocolChannel.Control,
             2 => ProtocolChannel.Bulk,
-            3 => ProtocolChannel.Realtime,
             _ => throw new ProtocolException(ProtocolError.InvalidChannel, $"Unknown protocol channel id: {id}")
         };
     }

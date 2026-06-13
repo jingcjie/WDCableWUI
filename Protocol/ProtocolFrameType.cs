@@ -13,10 +13,7 @@ public enum ProtocolFrameType
     BulkStart = 20,
     BulkChunk = 21,
     BulkComplete = 22,
-    BulkCancel = 23,
-    RealtimeStart = 30,
-    RealtimeData = 31,
-    RealtimeStop = 32
+    BulkCancel = 23
 }
 
 public static class ProtocolFrameTypeExtensions
@@ -37,9 +34,6 @@ public static class ProtocolFrameTypeExtensions
             ProtocolFrameType.BulkChunk => "bulk.chunk",
             ProtocolFrameType.BulkComplete => "bulk.complete",
             ProtocolFrameType.BulkCancel => "bulk.cancel",
-            ProtocolFrameType.RealtimeStart => "realtime.start",
-            ProtocolFrameType.RealtimeData => "realtime.data",
-            ProtocolFrameType.RealtimeStop => "realtime.stop",
             _ => throw new ProtocolException(ProtocolError.InvalidFrameType, $"Unknown protocol frame type id: {(int)type}")
         };
     }
@@ -60,9 +54,6 @@ public static class ProtocolFrameTypeExtensions
             21 => ProtocolFrameType.BulkChunk,
             22 => ProtocolFrameType.BulkComplete,
             23 => ProtocolFrameType.BulkCancel,
-            30 => ProtocolFrameType.RealtimeStart,
-            31 => ProtocolFrameType.RealtimeData,
-            32 => ProtocolFrameType.RealtimeStop,
             _ => throw new ProtocolException(ProtocolError.InvalidFrameType, $"Unknown protocol frame type id: {id}")
         };
     }
