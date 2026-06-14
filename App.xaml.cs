@@ -1,4 +1,7 @@
 using System;
+using System.Diagnostics;
+using System.IO;
+using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using WDCableWUI.Services;
@@ -26,6 +29,9 @@ namespace WDCableWUI
         public App()
         {
             InitializeComponent();
+            UnhandledException += OnUnhandledException;
+            AppDomain.CurrentDomain.UnhandledException += OnCurrentDomainUnhandledException;
+            TaskScheduler.UnobservedTaskException += OnUnobservedTaskException;
             
             // Initialize localization
             InitializeLocalization();
@@ -60,6 +66,34 @@ namespace WDCableWUI
                 _serviceInitializationError = $"WiFi Direct services could not be initialized: {ex.Message}";
                 // Log the error but continue app startup
                 // Services will be null but the app should still function
+            }
+        }
+
+        private void OnUnhandledException(object sender, Microsoft.UI.Xaml.UnhandledExceptionEventArgs e)
+        {
+            LogUnhandledException("Application.UnhandledException", e.Exception);
+        }
+
+        private static void OnCurrentDomainUnhandledException(object sender, System.UnhandledExceptionEventArgs e)
+        {
+            LogUnhandledException("AppDomain.UnhandledException", e.ExceptionObject);
+        }
+
+        private static void OnUnobservedTaskException(object? sender, UnobservedTaskExceptionEventArgs e)
+        {
+            LogUnhandledException("TaskScheduler.UnobservedTaskException", e.Exception);
+        }
+
+        private static void LogUnhandledException(string source, object? exception)
+        {
+            try
+            {
+                var message = $"{DateTimeOffset.Now:O} [{source}]{Environment.NewLine}{exception}{Environment.NewLine}{Environment.NewLine}";
+                File.AppendAllText(Path.Combine(ApplicationData.Current.LocalFolder.Path, "wdcable-crash.log"), message);
+                Debug.WriteLine(message);
+            }
+            catch
+            {
             }
         }
 

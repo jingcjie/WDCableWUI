@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Navigation;
 using WDCableWUI.UI.Connection;
 using WDCableWUI.UI.Chat;
 using WDCableWUI.UI.SpeedTest;
@@ -47,6 +48,7 @@ namespace WDCableWUI
                 { "Settings", typeof(SettingsPage) }
             };
             
+            ContentFrame.NavigationFailed += OnContentFrameNavigationFailed;
 
             
             // Set default page
@@ -108,10 +110,24 @@ namespace WDCableWUI
         {
             if (_pageTypes.TryGetValue(pageTag, out Type? pageType))
             {
-                // Use proper Frame navigation to ensure OnNavigatedTo/OnNavigatedFrom events are triggered
-                // This will allow pages to update their connection status when navigated to
-                ContentFrame.Navigate(pageType);
+                try
+                {
+                    // Use proper Frame navigation to ensure OnNavigatedTo/OnNavigatedFrom events are triggered
+                    // This will allow pages to update their connection status when navigated to
+                    ContentFrame.Navigate(pageType);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"Navigation to {pageTag} failed: {ex}");
+                    StatusMessage.Text = $"Could not open {pageTag}";
+                }
             }
+        }
+
+        private void OnContentFrameNavigationFailed(object sender, NavigationFailedEventArgs e)
+        {
+            Debug.WriteLine($"Frame navigation failed for {e.SourcePageType}: {e.Exception}");
+            StatusMessage.Text = "Page navigation failed";
         }
         
         private string GetLocalizedPageTitle(string pageTag)

@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
@@ -14,24 +15,33 @@ public sealed partial class AudioPage : Page
     private AudioService? _subscribedAudioService;
     private SessionManager? _sessionManager;
     private SessionManager? _subscribedSessionManager;
+    private bool _controlsReady;
 
     public AudioPage()
     {
         InitializeComponent();
+        _controlsReady = true;
         Unloaded += OnPageUnloaded;
-        InitializeServices();
         UpdateSourceForMode();
-        UpdateConnectionStatus();
-        UpdateButtonStates();
+        StateText.Text = StateDisplayName(AudioService.StateIdle);
+        StateDetailsText.Text = "Audio Link is idle";
     }
 
     protected override void OnNavigatedTo(NavigationEventArgs e)
     {
         base.OnNavigatedTo(e);
-        InitializeServices();
-        SubscribeToServiceEvents();
-        UpdateConnectionStatus();
-        UpdateButtonStates();
+        try
+        {
+            InitializeServices();
+            SubscribeToServiceEvents();
+            UpdateConnectionStatus();
+            UpdateButtonStates();
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"AudioPage navigation failed: {ex}");
+            ShowInfo("Audio page could not initialize. See debug output for details.", InfoBarSeverity.Error);
+        }
     }
 
     protected override void OnNavigatedFrom(NavigationEventArgs e)
@@ -169,14 +179,27 @@ public sealed partial class AudioPage : Page
 
     private void RefreshButton_Click(object sender, RoutedEventArgs e)
     {
-        InitializeServices();
-        SubscribeToServiceEvents();
-        UpdateConnectionStatus();
-        UpdateButtonStates();
+        try
+        {
+            InitializeServices();
+            SubscribeToServiceEvents();
+            UpdateConnectionStatus();
+            UpdateButtonStates();
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"AudioPage refresh failed: {ex}");
+            ShowInfo("Audio page refresh failed. See debug output for details.", InfoBarSeverity.Error);
+        }
     }
 
     private void ModeComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
+        if (!_controlsReady)
+        {
+            return;
+        }
+
         UpdateSourceForMode();
         UpdateButtonStates();
     }
@@ -251,6 +274,11 @@ public sealed partial class AudioPage : Page
 
     private void UpdateConnectionStatus()
     {
+        if (!_controlsReady)
+        {
+            return;
+        }
+
         if (!ServiceManager.AreWiFiDirectServicesAvailable)
         {
             ShowInfo(ServiceManager.ServiceUnavailableMessage, InfoBarSeverity.Warning);
@@ -288,6 +316,11 @@ public sealed partial class AudioPage : Page
 
     private void UpdateButtonStates()
     {
+        if (!_controlsReady)
+        {
+            return;
+        }
+
         var ready = _sessionManager?.IsReady == true;
         var peerSupportsAudio = ready && AudioProtocol.PeerSupportsAudio(_sessionManager?.PeerCapabilities ?? []);
         var active = _audioService?.IsActive == true;
@@ -299,6 +332,11 @@ public sealed partial class AudioPage : Page
 
     private void UpdateSourceForMode()
     {
+        if (!_controlsReady)
+        {
+            return;
+        }
+
         var mode = SelectedMode();
         if (mode == AudioService.ModeSend)
         {
@@ -338,6 +376,11 @@ public sealed partial class AudioPage : Page
 
     private void ShowInfo(string message, InfoBarSeverity severity)
     {
+        if (!_controlsReady)
+        {
+            return;
+        }
+
         AudioInfoBar.Message = message;
         AudioInfoBar.Severity = severity;
         AudioInfoBar.IsOpen = true;
