@@ -38,6 +38,20 @@ This repository contains the Windows version of WDCable, built with WinUI 3 for 
 
 An Android version of WDCable is also available, allowing for cross-platform data transfer. You can find it here: [WDCable for Android](https://github.com/jingcjie/WDCable_flutter).
 
+## Audio Link Status
+
+The shared post-Wi-Fi-Direct protocol is documented in `../PROTOCOL.md`. Android now has app-contained Audio Link v1 for Android-to-Android testing: one peer starts `Receive`, the other starts `Send`, and Opus microphone audio flows over an optional session-owned `audio` transport negotiated after the base session is `Ready`.
+
+WinUI has protocol scaffolding for the `audio` channel, `audio.frame` frame type, and audio capability constants, but it must not advertise `audio.link` or `audio.codec.opus` until the WinUI Audio page and Windows audio runtime are implemented. Keep raw TCP ownership inside `SessionManager` and transport adapters; feature code should use session APIs and control messages.
+
+WinUI Audio Link work should mirror Android v1:
+
+*   Receiver must explicitly start receive mode before accepting an offer.
+*   The group owner listens on an ephemeral audio port and sends `audio.transport`; the client connects, regardless of which side sends microphone audio.
+*   Audio errors use `audio_*` control error codes and must not fail the base session.
+*   v1 supports one active stream per session, microphone input, in-app playback, Opus, mono 48 kHz, 20 ms packets, and 24 kbps target bitrate.
+*   Android sends Opus codec-configuration frames before normal audio packets using `audio.frame` metadata `codecConfig: true`; the Windows decoder path must consume that initialization before playback.
+
 ## 🚀 Getting Started
 
 To get started with WDCable for Windows, you can either build the project from the source or download the latest release.

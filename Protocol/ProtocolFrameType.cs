@@ -13,7 +13,8 @@ public enum ProtocolFrameType
     BulkStart = 20,
     BulkChunk = 21,
     BulkComplete = 22,
-    BulkCancel = 23
+    BulkCancel = 23,
+    AudioFrame = 30
 }
 
 public static class ProtocolFrameTypeExtensions
@@ -34,6 +35,7 @@ public static class ProtocolFrameTypeExtensions
             ProtocolFrameType.BulkChunk => "bulk.chunk",
             ProtocolFrameType.BulkComplete => "bulk.complete",
             ProtocolFrameType.BulkCancel => "bulk.cancel",
+            ProtocolFrameType.AudioFrame => "audio.frame",
             _ => throw new ProtocolException(ProtocolError.InvalidFrameType, $"Unknown protocol frame type id: {(int)type}")
         };
     }
@@ -54,6 +56,7 @@ public static class ProtocolFrameTypeExtensions
             21 => ProtocolFrameType.BulkChunk,
             22 => ProtocolFrameType.BulkComplete,
             23 => ProtocolFrameType.BulkCancel,
+            30 => ProtocolFrameType.AudioFrame,
             _ => throw new ProtocolException(ProtocolError.InvalidFrameType, $"Unknown protocol frame type id: {id}")
         };
     }

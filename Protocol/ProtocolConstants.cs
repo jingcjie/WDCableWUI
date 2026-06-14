@@ -17,7 +17,11 @@ public static class ProtocolConstants
     public const string CapabilityBulkFile = "bulk.file";
     public const string CapabilityBulkSpeed = "bulk.speed";
     public const string CapabilityDiagnosticsExport = "diagnostics.export";
+    public const string CapabilityAudioLink = "audio.link";
+    public const string CapabilityAudioCodecOpus = "audio.codec.opus";
 
+    // Do not advertise audio capabilities until the WinUI Audio Link page and
+    // runtime are implemented. Android peers use this list for feature gating.
     public static readonly string[] AdvertisedCapabilities =
     [
         CapabilityChat,

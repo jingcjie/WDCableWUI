@@ -156,6 +156,42 @@ public sealed class ProtocolCodecTests
     }
 
     [TestMethod]
+    public void AudioFrameRoundTripsOnAudioChannel()
+    {
+        var payload = new byte[] { 0x11, 0x22, 0x33 };
+        var frame = new ProtocolFrame(
+            ProtocolFrameType.AudioFrame,
+            ProtocolChannel.Audio,
+            streamId: 101,
+            sequenceNumber: 5,
+            metadataJson: """{"codec":"opus","sentAtMs":1234,"durationMs":20}""",
+            payload: payload);
+
+        var decoded = ProtocolCodec.ReadFrame(new MemoryStream(ProtocolCodec.Encode(frame)));
+
+        Assert.IsNotNull(decoded);
+        Assert.AreEqual(ProtocolFrameType.AudioFrame, decoded.Type);
+        Assert.AreEqual(ProtocolChannel.Audio, decoded.Channel);
+        Assert.AreEqual("audio.frame", decoded.Type.GetProtocolName());
+        Assert.AreEqual("audio", decoded.Channel.GetProtocolName());
+        Assert.AreEqual(101, decoded.StreamId);
+        Assert.AreEqual(5, decoded.SequenceNumber);
+        Assert.AreEqual(frame.MetadataJson, decoded.MetadataJson);
+        CollectionAssert.AreEqual(payload, decoded.Payload);
+    }
+
+    [TestMethod]
+    public void WinUIDoesNotAdvertiseAudioUntilRuntimeIsImplemented()
+    {
+        CollectionAssert.DoesNotContain(
+            ProtocolConstants.AdvertisedCapabilities,
+            ProtocolConstants.CapabilityAudioLink);
+        CollectionAssert.DoesNotContain(
+            ProtocolConstants.AdvertisedCapabilities,
+            ProtocolConstants.CapabilityAudioCodecOpus);
+    }
+
+    [TestMethod]
     public void JsonMetadataRoundTripPreservesUtf8()
     {
         var metadata = JsonSerializer.Serialize(new
