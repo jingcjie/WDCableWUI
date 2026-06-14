@@ -496,6 +496,7 @@ public sealed class AudioService : IDisposable
             var pendingSamples = new List<short>(AudioProtocol.SamplesPerFrame * 4);
             using var capture = new WasapiLoopbackCapture();
             _loopbackCapture = capture;
+            await SendOpusCodecConfigFramesAsync(streamId, cancellationToken).ConfigureAwait(false);
 
             capture.DataAvailable += (_, args) =>
             {
@@ -559,6 +560,23 @@ public sealed class AudioService : IDisposable
             _loopbackCapture?.Dispose();
             _loopbackCapture = null;
             captureChannel.Writer.TryComplete();
+        }
+    }
+
+    private async Task SendOpusCodecConfigFramesAsync(long streamId, CancellationToken cancellationToken)
+    {
+        var packets = AudioProtocol.AndroidOpusCodecConfigPackets();
+        for (var index = 0; index < packets.Count; index++)
+        {
+            await _sessionManager!.WriteAudioFrameAsync(
+                streamId,
+                Interlocked.Increment(ref _audioSequence),
+                AudioProtocol.FrameMetadata(
+                    DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                    codecConfig: true,
+                    codecConfigIndex: index),
+                packets[index],
+                cancellationToken).ConfigureAwait(false);
         }
     }
 

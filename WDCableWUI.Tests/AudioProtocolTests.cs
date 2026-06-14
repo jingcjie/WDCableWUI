@@ -65,6 +65,21 @@ public sealed class AudioProtocolTests
     }
 
     [TestMethod]
+    public void AndroidOpusCodecConfigPacketsUseMediaCodecLayout()
+    {
+        var packets = AudioProtocol.AndroidOpusCodecConfigPackets();
+
+        Assert.AreEqual(3, packets.Count);
+        CollectionAssert.AreEqual("OpusHead"u8.ToArray(), packets[0][..8]);
+        Assert.AreEqual(1, packets[0][8]);
+        Assert.AreEqual((byte)AudioProtocol.Channels, packets[0][9]);
+        Assert.AreEqual(19, packets[0].Length);
+        Assert.AreEqual(8, packets[1].Length);
+        Assert.AreEqual(8, packets[2].Length);
+        Assert.AreEqual(6_500_000L, AudioProtocol.OpusCodecDelayNs());
+    }
+
+    [TestMethod]
     public void PeerAudioCapabilityRequiresLinkAndOpus()
     {
         Assert.IsTrue(AudioProtocol.PeerSupportsAudio(

@@ -1,4 +1,5 @@
 using System;
+using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
@@ -34,6 +35,8 @@ public static class AudioProtocol
     public const int FrameDurationMs = 20;
     public const int BitrateBps = 24_000;
     public const int SamplesPerFrame = SampleRate * FrameDurationMs / 1000;
+    public const int OpusPreSkipSamples = 312;
+    public const long OpusSeekPreRollNs = 80_000_000;
 
     public static bool PeerSupportsAudio(IReadOnlyList<string> capabilities)
     {
@@ -112,15 +115,37 @@ public static class AudioProtocol
         });
     }
 
-    public static string FrameMetadata(long sentAtMs, bool codecConfig = false)
+    public static string FrameMetadata(long sentAtMs, bool codecConfig = false, int? codecConfigIndex = null)
     {
-        return BuildMetadata(new Dictionary<string, object?>
+        var values = new Dictionary<string, object?>
         {
             ["codec"] = CodecOpus,
             ["sentAtMs"] = sentAtMs,
             ["durationMs"] = codecConfig ? 0 : FrameDurationMs,
             ["codecConfig"] = codecConfig
-        });
+        };
+
+        if (codecConfigIndex != null)
+        {
+            values["codecConfigIndex"] = codecConfigIndex.Value;
+        }
+
+        return BuildMetadata(values);
+    }
+
+    public static IReadOnlyList<byte[]> AndroidOpusCodecConfigPackets()
+    {
+        return
+        [
+            OpusHead(),
+            Int64LittleEndian(OpusCodecDelayNs()),
+            Int64LittleEndian(OpusSeekPreRollNs)
+        ];
+    }
+
+    public static long OpusCodecDelayNs()
+    {
+        return OpusPreSkipSamples * 1_000_000_000L / SampleRate;
     }
 
     public static string BuildMetadata(IDictionary<string, object?> values)
@@ -251,6 +276,26 @@ public static class AudioProtocol
         {
             throw new FormatException($"Expected {kind}, received {actual}");
         }
+    }
+
+    private static byte[] OpusHead()
+    {
+        var header = new byte[19];
+        "OpusHead"u8.CopyTo(header);
+        header[8] = 1; // OpusHead version.
+        header[9] = Channels;
+        BinaryPrimitives.WriteUInt16LittleEndian(header.AsSpan(10, 2), OpusPreSkipSamples);
+        BinaryPrimitives.WriteInt32LittleEndian(header.AsSpan(12, 4), SampleRate);
+        BinaryPrimitives.WriteInt16LittleEndian(header.AsSpan(16, 2), 0); // Output gain.
+        header[18] = 0; // Mono/stereo channel mapping family.
+        return header;
+    }
+
+    private static byte[] Int64LittleEndian(long value)
+    {
+        var buffer = new byte[sizeof(long)];
+        BinaryPrimitives.WriteInt64LittleEndian(buffer, value);
+        return buffer;
     }
 }
 
