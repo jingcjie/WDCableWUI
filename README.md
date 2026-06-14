@@ -40,16 +40,16 @@ An Android version of WDCable is also available, allowing for cross-platform dat
 
 ## Audio Link Status
 
-The shared post-Wi-Fi-Direct protocol is documented in `../PROTOCOL.md`. Android now has app-contained Audio Link v1 for Android-to-Android testing: one peer starts `Receive`, the other starts `Send`, and Opus microphone audio flows over an optional session-owned `audio` transport negotiated after the base session is `Ready`.
+The shared post-Wi-Fi-Direct protocol is documented in `../PROTOCOL.md`. Audio Link v1 is app-contained: one peer starts `Receive`, the other starts `Send`, and Opus audio flows over an optional session-owned `audio` transport negotiated after the base session is `Ready`.
 
-WinUI has protocol scaffolding for the `audio` channel, `audio.frame` frame type, and audio capability constants, but it must not advertise `audio.link` or `audio.codec.opus` until the WinUI Audio page and Windows audio runtime are implemented. Keep raw TCP ownership inside `SessionManager` and transport adapters; feature code should use session APIs and control messages.
+WinUI has an Audio page and Windows audio runtime. Android send captures microphone audio. Windows send captures default system output through WASAPI loopback so Android can act as the Windows speaker. For compatibility with the current Android receiver, Windows still sends `source: "microphone"` in `audio.offer` metadata even though the local source is system audio. Keep raw TCP ownership inside `SessionManager` and transport adapters; feature code should use session APIs and control messages.
 
 WinUI Audio Link work should mirror Android v1:
 
 *   Receiver must explicitly start receive mode before accepting an offer.
-*   The group owner listens on an ephemeral audio port and sends `audio.transport`; the client connects, regardless of which side sends microphone audio.
+*   The group owner listens on an ephemeral audio port and sends `audio.transport`; the client connects, regardless of which side sends audio.
 *   Audio errors use `audio_*` control error codes and must not fail the base session.
-*   v1 supports one active stream per session, microphone input, in-app playback, Opus, mono 48 kHz, 20 ms packets, and 24 kbps target bitrate.
+*   v1 supports one active stream per session, Android microphone input, Windows system-audio input, in-app playback, Opus, mono 48 kHz, 20 ms packets, and 24 kbps target bitrate.
 *   Android sends Opus codec-configuration frames before normal audio packets using `audio.frame` metadata `codecConfig: true`; the Windows decoder path must consume that initialization before playback.
 
 ## 🚀 Getting Started

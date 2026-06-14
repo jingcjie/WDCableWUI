@@ -45,7 +45,8 @@ public sealed class SessionReadyEventArgs : EventArgs
         string? peerName,
         string? peerAddress,
         int protocolVersion,
-        IReadOnlyList<string> capabilities)
+        IReadOnlyList<string> capabilities,
+        IReadOnlyList<string>? peerCapabilities = null)
     {
         SessionId = sessionId;
         Role = role;
@@ -53,6 +54,7 @@ public sealed class SessionReadyEventArgs : EventArgs
         PeerAddress = peerAddress;
         ProtocolVersion = protocolVersion;
         Capabilities = capabilities;
+        PeerCapabilities = peerCapabilities ?? [];
     }
 
     public string SessionId { get; }
@@ -66,6 +68,8 @@ public sealed class SessionReadyEventArgs : EventArgs
     public int ProtocolVersion { get; }
 
     public IReadOnlyList<string> Capabilities { get; }
+
+    public IReadOnlyList<string> PeerCapabilities { get; }
 }
 
 public sealed class SessionFailedEventArgs : EventArgs
@@ -119,4 +123,56 @@ public sealed class ProtocolFrameReceivedEventArgs : EventArgs
     public string SessionId { get; }
 
     public ProtocolFrame Frame { get; }
+}
+
+public sealed class AudioSessionInfo
+{
+    public AudioSessionInfo(
+        string sessionId,
+        SessionRole role,
+        string? peerAddress,
+        IReadOnlyList<string> peerCapabilities)
+    {
+        SessionId = sessionId;
+        Role = role;
+        PeerAddress = peerAddress;
+        PeerCapabilities = peerCapabilities;
+    }
+
+    public string SessionId { get; }
+
+    public SessionRole Role { get; }
+
+    public string? PeerAddress { get; }
+
+    public IReadOnlyList<string> PeerCapabilities { get; }
+}
+
+public sealed class AudioTransportEventArgs : EventArgs
+{
+    public AudioTransportEventArgs(string sessionId, long streamId)
+    {
+        SessionId = sessionId;
+        StreamId = streamId;
+    }
+
+    public string SessionId { get; }
+
+    public long StreamId { get; }
+}
+
+public sealed class AudioTransportClosedEventArgs : EventArgs
+{
+    public AudioTransportClosedEventArgs(string sessionId, long streamId, string reason)
+    {
+        SessionId = sessionId;
+        StreamId = streamId;
+        Reason = reason;
+    }
+
+    public string SessionId { get; }
+
+    public long StreamId { get; }
+
+    public string Reason { get; }
 }

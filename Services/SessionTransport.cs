@@ -23,6 +23,11 @@ public interface ISessionTransport : IAsyncDisposable, IDisposable
 
 public interface ISessionTransportAdapter : IDisposable
 {
+    ISessionTransportListener Listen(
+        ProtocolChannel channel,
+        IPAddress localAddress,
+        int port);
+
     Task<ISessionTransport> AcceptAsync(
         ProtocolChannel channel,
         IPAddress localAddress,
@@ -39,4 +44,17 @@ public interface ISessionTransportAdapter : IDisposable
     void Close();
 
     void Cancel();
+}
+
+public interface ISessionTransportListener : IDisposable
+{
+    ProtocolChannel Channel { get; }
+
+    int Port { get; }
+
+    Task<ISessionTransport> AcceptAsync(
+        Func<bool> shouldCancel,
+        CancellationToken cancellationToken);
+
+    void Close();
 }

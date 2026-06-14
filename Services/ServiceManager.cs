@@ -18,6 +18,7 @@ namespace WDCableWUI.Services
         private static ChatService? _chatService;
         private static SpeedTestService? _speedTestService;
         private static FileTransferService? _fileTransferService;
+        private static AudioService? _audioService;
         private static readonly object _lock = new object();
         private static bool _isInitialized = false;
         private static bool _areWiFiDirectServicesAvailable = false;
@@ -109,6 +110,17 @@ namespace WDCableWUI.Services
             get
             {
                 return _fileTransferService;
+            }
+        }
+
+        /// <summary>
+        /// Gets the AudioService instance.
+        /// </summary>
+        public static AudioService? AudioService
+        {
+            get
+            {
+                return _audioService;
             }
         }
         
@@ -228,11 +240,13 @@ namespace WDCableWUI.Services
             ChatService.ResetInstance();
             SpeedTestService.ResetInstance();
             FileTransferService.ResetInstance();
+            WDCableWUI.Services.AudioService.ResetInstance();
 
             // Create new instances - these will automatically subscribe to ConnectionService events
             _chatService = ChatService.Instance;
             _speedTestService = SpeedTestService.Instance;
             _fileTransferService = FileTransferService.Instance;
+            _audioService = WDCableWUI.Services.AudioService.Instance;
         }
 
         private static void DisposeWiFiDirectServices()
@@ -248,9 +262,13 @@ namespace WDCableWUI.Services
                 _fileTransferService?.Dispose();
                 _fileTransferService = null;
 
+                _audioService?.Dispose();
+                _audioService = null;
+
                 ChatService.ResetInstance();
                 SpeedTestService.ResetInstance();
                 FileTransferService.ResetInstance();
+                WDCableWUI.Services.AudioService.ResetInstance();
 
                 _connectionService = null;
                 ConnectionService.ResetInstance();

@@ -8,6 +8,7 @@ using WDCableWUI.UI.Connection;
 using WDCableWUI.UI.Chat;
 using WDCableWUI.UI.SpeedTest;
 using WDCableWUI.UI.FileTransfer;
+using WDCableWUI.UI.Audio;
 using WDCableWUI.UI.Settings;
 using WDCableWUI.Services;
 using Microsoft.UI.Windowing;
@@ -42,6 +43,7 @@ namespace WDCableWUI
                 { "Chat", typeof(ChatPage) },
                 { "SpeedTest", typeof(SpeedTestPage) },
                 { "FileTransfer", typeof(FileTransferPage) },
+                { "Audio", typeof(AudioPage) },
                 { "Settings", typeof(SettingsPage) }
             };
             

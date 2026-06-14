@@ -7,6 +7,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Concentus" Version="2.2.2" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
     <PackageReference Include="MSTest.TestAdapter" Version="3.6.4" />
     <PackageReference Include="MSTest.TestFramework" Version="3.6.4" />
@@ -15,6 +16,8 @@
   <ItemGroup>
     <Compile Include="..\Protocol\*.cs" Link="Protocol\%(Filename)%(Extension)" />
     <Compile Include="..\Services\BulkProtocol.cs" Link="Services\%(Filename)%(Extension)" />
+    <Compile Include="..\Services\AudioProtocol.cs" Link="Services\%(Filename)%(Extension)" />
+    <Compile Include="..\Services\JitterBuffer.cs" Link="Services\%(Filename)%(Extension)" />
     <Compile Include="..\Services\ChatProtocol.cs" Link="Services\%(Filename)%(Extension)" />
     <Compile Include="..\Services\SessionPhase.cs" Link="Services\%(Filename)%(Extension)" />
     <Compile Include="..\Services\SessionStateMachine.cs" Link="Services\%(Filename)%(Extension)" />

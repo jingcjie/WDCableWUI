@@ -1,0 +1,197 @@
+<Page
+    x:Class="WDCableWUI.UI.Audio.AudioPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    Background="Transparent">
+
+    <Page.Resources>
+        <Style x:Key="AudioCardStyle" TargetType="Border">
+            <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}"/>
+            <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="Padding" Value="20"/>
+        </Style>
+    </Page.Resources>
+
+    <ScrollViewer>
+        <Grid Margin="24">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <StackPanel Grid.Row="0" Spacing="8" Margin="0,0,0,24">
+                <TextBlock x:Uid="Audio_Title"
+                           Style="{StaticResource SubtitleTextBlockStyle}"
+                           Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                <TextBlock x:Uid="Audio_Description"
+                           Style="{StaticResource CaptionTextBlockStyle}"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+            </StackPanel>
+
+            <Grid Grid.Row="1" Margin="0,0,0,16">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="2*"/>
+                    <ColumnDefinition Width="12"/>
+                    <ColumnDefinition Width="1*"/>
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0" Spacing="16">
+                    <Border Style="{StaticResource AudioCardStyle}">
+                        <StackPanel Spacing="16">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon FontFamily="{StaticResource SymbolThemeFontFamily}"
+                                          Glyph="&#xE767;"
+                                          FontSize="20"
+                                          Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
+                                <TextBlock x:Uid="Audio_Link_Title"
+                                           Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                            </StackPanel>
+
+                            <InfoBar x:Name="AudioInfoBar"
+                                     IsOpen="False"
+                                     Severity="Informational"
+                                     IsClosable="False"/>
+
+                            <Grid ColumnSpacing="12" RowSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <ComboBox x:Name="ModeComboBox"
+                                          Grid.Row="0"
+                                          Grid.Column="0"
+                                          x:Uid="Audio_Mode_Header"
+                                          SelectedIndex="0"
+                                          HorizontalAlignment="Stretch"
+                                          SelectionChanged="ModeComboBox_SelectionChanged">
+                                    <ComboBoxItem x:Uid="Audio_Mode_Send" Tag="send"/>
+                                    <ComboBoxItem x:Uid="Audio_Mode_Receive" Tag="receive"/>
+                                </ComboBox>
+
+                                <ComboBox x:Name="SourceComboBox"
+                                          Grid.Row="0"
+                                          Grid.Column="1"
+                                          x:Uid="Audio_Source_Header"
+                                          SelectedIndex="0"
+                                          HorizontalAlignment="Stretch">
+                                    <ComboBoxItem x:Uid="Audio_Source_SystemAudio" Tag="systemAudio"/>
+                                    <ComboBoxItem x:Uid="Audio_Source_Microphone" Tag="microphone" IsEnabled="False"/>
+                                </ComboBox>
+
+                                <ComboBox x:Name="EncodingComboBox"
+                                          Grid.Row="0"
+                                          Grid.Column="2"
+                                          x:Uid="Audio_Encoding_Header"
+                                          SelectedIndex="0"
+                                          HorizontalAlignment="Stretch"
+                                          IsEnabled="False">
+                                    <ComboBoxItem Content="Opus" Tag="opus"/>
+                                </ComboBox>
+
+                                <StackPanel Grid.Row="1" Grid.ColumnSpan="3" Orientation="Horizontal" Spacing="8">
+                                    <Button x:Name="StartButton"
+                                            x:Uid="Audio_Start_Button"
+                                            Style="{StaticResource AccentButtonStyle}"
+                                            Click="StartButton_Click"/>
+                                    <Button x:Name="StopButton"
+                                            x:Uid="Audio_Stop_Button"
+                                            IsEnabled="False"
+                                            Click="StopButton_Click"/>
+                                    <Button x:Name="RefreshButton"
+                                            x:Uid="Audio_Refresh_Button"
+                                            Click="RefreshButton_Click"/>
+                                </StackPanel>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource AudioCardStyle}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <FontIcon x:Name="StateIcon"
+                                      Grid.Column="0"
+                                      FontFamily="{StaticResource SymbolThemeFontFamily}"
+                                      Glyph="&#xE783;"
+                                      FontSize="20"
+                                      Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                                      VerticalAlignment="Center"/>
+
+                            <StackPanel Grid.Column="1" Margin="12,0,0,0" Spacing="4">
+                                <TextBlock x:Name="StateText"
+                                           Style="{StaticResource BodyStrongTextBlockStyle}"
+                                           Text="Idle"/>
+                                <TextBlock x:Name="StateDetailsText"
+                                           Style="{StaticResource CaptionTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                           TextWrapping="Wrap"
+                                           Text="Audio Link is idle"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                </StackPanel>
+
+                <Border Grid.Column="2" Style="{StaticResource AudioCardStyle}">
+                    <StackPanel Spacing="16">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon FontFamily="{StaticResource SymbolThemeFontFamily}"
+                                      Glyph="&#xE9D9;"
+                                      FontSize="20"
+                                      Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
+                            <TextBlock x:Uid="Audio_Stats_Title"
+                                       Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                        </StackPanel>
+
+                        <Grid RowSpacing="10" ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Text="Bitrate" Style="{StaticResource CaptionTextBlockStyle}"/>
+                            <TextBlock x:Name="BitrateText" Grid.Row="0" Grid.Column="1" Text="0 bps" Style="{StaticResource BodyStrongTextBlockStyle}"/>
+
+                            <TextBlock Grid.Row="1" Text="Buffer" Style="{StaticResource CaptionTextBlockStyle}"/>
+                            <TextBlock x:Name="BufferText" Grid.Row="1" Grid.Column="1" Text="0 ms" Style="{StaticResource BodyStrongTextBlockStyle}"/>
+
+                            <TextBlock Grid.Row="2" Text="Sent" Style="{StaticResource CaptionTextBlockStyle}"/>
+                            <TextBlock x:Name="FramesSentText" Grid.Row="2" Grid.Column="1" Text="0" Style="{StaticResource BodyStrongTextBlockStyle}"/>
+
+                            <TextBlock Grid.Row="3" Text="Received" Style="{StaticResource CaptionTextBlockStyle}"/>
+                            <TextBlock x:Name="FramesReceivedText" Grid.Row="3" Grid.Column="1" Text="0" Style="{StaticResource BodyStrongTextBlockStyle}"/>
+
+                            <TextBlock Grid.Row="4" Text="Dropped" Style="{StaticResource CaptionTextBlockStyle}"/>
+                            <TextBlock x:Name="DroppedText" Grid.Row="4" Grid.Column="1" Text="0" Style="{StaticResource BodyStrongTextBlockStyle}"/>
+
+                            <TextBlock Grid.Row="5" Text="Underflows" Style="{StaticResource CaptionTextBlockStyle}"/>
+                            <TextBlock x:Name="UnderflowText" Grid.Row="5" Grid.Column="1" Text="0" Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Grid>
+    </ScrollViewer>
+</Page>

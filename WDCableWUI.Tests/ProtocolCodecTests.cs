@@ -181,12 +181,12 @@ public sealed class ProtocolCodecTests
     }
 
     [TestMethod]
-    public void WinUIDoesNotAdvertiseAudioUntilRuntimeIsImplemented()
+    public void WinUIAdvertisesAudioAfterRuntimeIsImplemented()
     {
-        CollectionAssert.DoesNotContain(
+        CollectionAssert.Contains(
             ProtocolConstants.AdvertisedCapabilities,
             ProtocolConstants.CapabilityAudioLink);
-        CollectionAssert.DoesNotContain(
+        CollectionAssert.Contains(
             ProtocolConstants.AdvertisedCapabilities,
             ProtocolConstants.CapabilityAudioCodecOpus);
     }

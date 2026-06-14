@@ -191,6 +191,9 @@
   <data name="MainWindow_Navigation_FileTransfer.Content" xml:space="preserve">
     <value>File Transfer</value>
   </data>
+  <data name="MainWindow_Navigation_Audio.Content" xml:space="preserve">
+    <value>Audio</value>
+  </data>
   <data name="MainWindow_Navigation_Settings.Content" xml:space="preserve">
     <value>Settings</value>
   </data>
@@ -346,6 +349,9 @@
   <data name="MainWindow_PageTitle_FileTransfer" xml:space="preserve">
     <value>File Transfer</value>
   </data>
+  <data name="MainWindow_PageTitle_Audio" xml:space="preserve">
+    <value>Audio</value>
+  </data>
   <data name="MainWindow_PageTitle_Settings" xml:space="preserve">
     <value>Settings</value>
   </data>
@@ -418,5 +424,49 @@
   <!-- Missing FileTransfer strings -->
   <data name="FileTransfer_ClearAllRecords.Content" xml:space="preserve">
     <value>Clear All Records</value>
+  </data>
+
+  <!-- Audio Page -->
+  <data name="Audio_Title.Text" xml:space="preserve">
+    <value>Audio Link</value>
+  </data>
+  <data name="Audio_Description.Text" xml:space="preserve">
+    <value>Stream audio between connected devices</value>
+  </data>
+  <data name="Audio_Link_Title.Text" xml:space="preserve">
+    <value>Audio Link</value>
+  </data>
+  <data name="Audio_Mode_Header.Header" xml:space="preserve">
+    <value>Mode</value>
+  </data>
+  <data name="Audio_Mode_Send.Content" xml:space="preserve">
+    <value>Send</value>
+  </data>
+  <data name="Audio_Mode_Receive.Content" xml:space="preserve">
+    <value>Receive</value>
+  </data>
+  <data name="Audio_Source_Header.Header" xml:space="preserve">
+    <value>Source</value>
+  </data>
+  <data name="Audio_Source_SystemAudio.Content" xml:space="preserve">
+    <value>System audio</value>
+  </data>
+  <data name="Audio_Source_Microphone.Content" xml:space="preserve">
+    <value>Microphone unavailable</value>
+  </data>
+  <data name="Audio_Encoding_Header.Header" xml:space="preserve">
+    <value>Encoding</value>
+  </data>
+  <data name="Audio_Start_Button.Content" xml:space="preserve">
+    <value>Start</value>
+  </data>
+  <data name="Audio_Stop_Button.Content" xml:space="preserve">
+    <value>Stop</value>
+  </data>
+  <data name="Audio_Refresh_Button.Content" xml:space="preserve">
+    <value>Refresh</value>
+  </data>
+  <data name="Audio_Stats_Title.Text" xml:space="preserve">
+    <value>Live Stats</value>
   </data>
 </root>

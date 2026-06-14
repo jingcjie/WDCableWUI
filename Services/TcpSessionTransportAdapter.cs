@@ -19,12 +19,10 @@ public sealed class TcpSessionTransportAdapter : ISessionTransportAdapter
     private readonly List<TcpClient> _clients = [];
     private bool _isClosed;
 
-    public async Task<ISessionTransport> AcceptAsync(
+    public ISessionTransportListener Listen(
         ProtocolChannel channel,
         IPAddress localAddress,
-        int port,
-        Func<bool> shouldCancel,
-        CancellationToken cancellationToken)
+        int port)
     {
         ObjectDisposedException.ThrowIf(_isClosed, this);
 
@@ -35,35 +33,26 @@ public sealed class TcpSessionTransportAdapter : ISessionTransportAdapter
         try
         {
             listener.Start();
-            var acceptTask = listener.AcceptTcpClientAsync();
-
-            while (!shouldCancel())
-            {
-                var delayTask = Task.Delay(AcceptPollDelay, cancellationToken);
-                var completedTask = await Task.WhenAny(acceptTask, delayTask).ConfigureAwait(false);
-                cancellationToken.ThrowIfCancellationRequested();
-
-                if (completedTask == acceptTask)
-                {
-                    var client = await acceptTask.ConfigureAwait(false);
-                    ConfigureClient(client, channel);
-                    AddClient(client);
-                    return new TcpSessionTransport(channel, client, RemoveClient);
-                }
-            }
-
-            throw new OperationCanceledException($"Accept cancelled for {channel.GetProtocolName()} channel.", cancellationToken);
+            var actualPort = ((IPEndPoint)listener.LocalEndpoint).Port;
+            return new TcpSessionTransportListener(channel, listener, actualPort, RemoveListener, AddClient, RemoveClient);
         }
         catch
         {
+            RemoveListener(listener);
             CloseQuietly(listener);
             throw;
         }
-        finally
-        {
-            RemoveListener(listener);
-            CloseQuietly(listener);
-        }
+    }
+
+    public async Task<ISessionTransport> AcceptAsync(
+        ProtocolChannel channel,
+        IPAddress localAddress,
+        int port,
+        Func<bool> shouldCancel,
+        CancellationToken cancellationToken)
+    {
+        using var listener = Listen(channel, localAddress, port);
+        return await listener.AcceptAsync(shouldCancel, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<ISessionTransport> ConnectAsync(
@@ -190,6 +179,75 @@ public sealed class TcpSessionTransportAdapter : ISessionTransportAdapter
         }
         catch
         {
+        }
+    }
+
+    private sealed class TcpSessionTransportListener : ISessionTransportListener
+    {
+        private readonly TcpListener _listener;
+        private readonly Action<TcpListener> _onClosed;
+        private readonly Action<TcpClient> _onClientAccepted;
+        private readonly Action<TcpClient> _onClientClosed;
+        private bool _isClosed;
+
+        public TcpSessionTransportListener(
+            ProtocolChannel channel,
+            TcpListener listener,
+            int port,
+            Action<TcpListener> onClosed,
+            Action<TcpClient> onClientAccepted,
+            Action<TcpClient> onClientClosed)
+        {
+            Channel = channel;
+            _listener = listener;
+            Port = port;
+            _onClosed = onClosed;
+            _onClientAccepted = onClientAccepted;
+            _onClientClosed = onClientClosed;
+        }
+
+        public ProtocolChannel Channel { get; }
+
+        public int Port { get; }
+
+        public async Task<ISessionTransport> AcceptAsync(
+            Func<bool> shouldCancel,
+            CancellationToken cancellationToken)
+        {
+            var acceptTask = _listener.AcceptTcpClientAsync();
+            while (!shouldCancel())
+            {
+                var delayTask = Task.Delay(AcceptPollDelay, cancellationToken);
+                var completedTask = await Task.WhenAny(acceptTask, delayTask).ConfigureAwait(false);
+                cancellationToken.ThrowIfCancellationRequested();
+
+                if (completedTask == acceptTask)
+                {
+                    var client = await acceptTask.ConfigureAwait(false);
+                    ConfigureClient(client, Channel);
+                    _onClientAccepted(client);
+                    return new TcpSessionTransport(Channel, client, _onClientClosed);
+                }
+            }
+
+            throw new OperationCanceledException($"Accept cancelled for {Channel.GetProtocolName()} channel.", cancellationToken);
+        }
+
+        public void Close()
+        {
+            if (_isClosed)
+            {
+                return;
+            }
+
+            _isClosed = true;
+            _onClosed(_listener);
+            CloseQuietly(_listener);
+        }
+
+        public void Dispose()
+        {
+            Close();
         }
     }
 

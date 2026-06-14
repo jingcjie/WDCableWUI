@@ -85,6 +85,12 @@
                         <InfoBadge x:Name="FileTransferBadge" Visibility="Collapsed"/>
                     </NavigationViewItem.InfoBadge>
                 </NavigationViewItem>
+
+                <NavigationViewItem x:Uid="MainWindow_Navigation_Audio" Tag="Audio">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE767;"/>
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
                 
                 <NavigationViewItem x:Uid="MainWindow_Navigation_Settings" Tag="Settings">
                     <NavigationViewItem.Icon>
