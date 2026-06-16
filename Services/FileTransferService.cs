@@ -363,6 +363,24 @@ namespace WDCableWUI.Services
             var transferId = BulkProtocol.GetString(metadata, "transferId", Guid.NewGuid().ToString());
             var originalName = BulkProtocol.GetString(metadata, "fileName", "unknown_file");
             var expectedSize = BulkProtocol.GetInt64(metadata, "sizeBytes", -1);
+            if (expectedSize < 0)
+            {
+                expectedSize = -1;
+            }
+
+            if (_incomingFiles.TryRemove(frame.StreamId, out var existing))
+            {
+                existing.Dispose();
+                TryDelete(existing.WorkingPath);
+                OnTransferFailed(
+                    existing.SafeFileName,
+                    existing.TargetPath,
+                    existing.BytesReceived,
+                    existing.TransferId,
+                    isSender: false,
+                    errorMessage: "Duplicate file transfer start received for the same stream.");
+            }
+
             var targetDirectory = ResolveDownloadDirectory();
             var targetPath = BulkProtocol.DuplicateSafePath(targetDirectory, originalName);
             var workingPath = CreatePartialPath(targetPath);

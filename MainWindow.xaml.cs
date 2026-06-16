@@ -36,7 +36,6 @@ namespace WDCableWUI
             
             // Configure custom title bar
             SetupCustomTitleBar();
-            Debug.WriteLine("Sample Debug message: MainWindow initialized");
             // Initialize page type mappings
             _pageTypes = new Dictionary<string, Type>
             {

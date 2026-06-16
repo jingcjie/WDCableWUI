@@ -33,6 +33,16 @@ public sealed class BulkProtocolTests
     }
 
     [TestMethod]
+    public void SafeFileNameRejectsTraversalAndReservedNames()
+    {
+        Assert.AreEqual("unknown_file", BulkProtocol.SafeFileName(".."));
+        Assert.AreEqual("unknown_file", BulkProtocol.SafeFileName("."));
+        Assert.AreEqual("a_b.txt", BulkProtocol.SafeFileName("a:b.txt"));
+        Assert.AreEqual("_CON.txt", BulkProtocol.SafeFileName("CON.txt"));
+        Assert.AreEqual("_LPT1", BulkProtocol.SafeFileName("LPT1"));
+    }
+
+    [TestMethod]
     public void DuplicateSafePathAvoidsExistingFile()
     {
         var directory = Path.Combine(Path.GetTempPath(), $"WDCableWUI-{Guid.NewGuid():N}");
@@ -67,5 +77,13 @@ public sealed class BulkProtocolTests
         var mbps = BulkProtocol.CalculateMbps(1024 * 1024, TimeSpan.FromSeconds(1));
 
         Assert.AreEqual(8.0, mbps, 0.001);
+    }
+
+    [TestMethod]
+    public void CalculateMbpsNeverReturnsNegativeSpeed()
+    {
+        var mbps = BulkProtocol.CalculateMbps(-1024, TimeSpan.FromSeconds(1));
+
+        Assert.AreEqual(0, mbps);
     }
 }

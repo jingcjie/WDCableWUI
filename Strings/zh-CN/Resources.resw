@@ -307,6 +307,9 @@
   <data name="FileTransfer_SelectedFile.Text" xml:space="preserve">
     <value>选择的文件：</value>
   </data>
+  <data name="FileTransfer_SelectedFile_Label.Text" xml:space="preserve">
+    <value>选择的文件：</value>
+  </data>
   <data name="FileTransfer_Receive_Title.Text" xml:space="preserve">
     <value>接收设置</value>
   </data>
@@ -467,5 +470,16 @@
   </data>
   <data name="Audio_Stats_Title.Text" xml:space="preserve">
     <value>Live Stats</value>
+  </data>
+
+  <!-- WiFi Direct availability -->
+  <data name="WiFiDirectUnavailable_Title" xml:space="preserve">
+    <value>WiFi Direct 不可用</value>
+  </data>
+  <data name="WiFiDirectUnavailable_PeerDiscoveryMessage" xml:space="preserve">
+    <value>此 WiFi 适配器或驱动不支持 WDCable 所需的 Windows WiFi Direct 对等发现。</value>
+  </data>
+  <data name="Common_OK" xml:space="preserve">
+    <value>确定</value>
   </data>
 </root>

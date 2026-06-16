@@ -123,8 +123,16 @@ public sealed class AudioService : IDisposable
         }
 
         ResetStats();
-        await SendAudioControlAsync(AudioProtocol.ReceiveReady(0), cancellationToken).ConfigureAwait(false);
-        EmitState("Ready to receive audio");
+        try
+        {
+            await SendAudioControlAsync(AudioProtocol.ReceiveReady(0), cancellationToken).ConfigureAwait(false);
+            EmitState("Ready to receive audio");
+        }
+        catch
+        {
+            CleanupLocal("receive_start_failed", emitStopped: true);
+            throw;
+        }
     }
 
     public async Task StartSendAsync(CancellationToken cancellationToken = default)
@@ -157,25 +165,38 @@ public sealed class AudioService : IDisposable
         }
 
         ResetStats();
-        await SendAudioControlAsync(AudioProtocol.Offer(streamId, offerId), cancellationToken).ConfigureAwait(false);
-        EmitState("System audio offer sent");
+        try
+        {
+            await SendAudioControlAsync(AudioProtocol.Offer(streamId, offerId), cancellationToken).ConfigureAwait(false);
+            EmitState("System audio offer sent");
+        }
+        catch
+        {
+            CleanupLocal("send_start_failed", emitStopped: true);
+            throw;
+        }
     }
 
     public async Task StopAsync(CancellationToken cancellationToken = default)
     {
         var currentStreamId = Interlocked.Read(ref _streamId);
         var currentMode = _mode;
-        if (currentStreamId != 0 && _state != StateIdle)
+        try
         {
-            await SendAudioControlAsync(AudioProtocol.Stop(currentStreamId, "local_stop"), cancellationToken).ConfigureAwait(false);
-        }
+            if (currentStreamId != 0 && _state != StateIdle)
+            {
+                await SendAudioControlAsync(AudioProtocol.Stop(currentStreamId, "local_stop"), cancellationToken).ConfigureAwait(false);
+            }
 
-        if (currentMode == ModeReceive)
+            if (currentMode == ModeReceive)
+            {
+                await SendAudioControlAsync(AudioProtocol.ReceiveStopped(currentStreamId), cancellationToken).ConfigureAwait(false);
+            }
+        }
+        finally
         {
-            await SendAudioControlAsync(AudioProtocol.ReceiveStopped(currentStreamId), cancellationToken).ConfigureAwait(false);
+            CleanupLocal("stopped", emitStopped: true);
         }
-
-        CleanupLocal("stopped", emitStopped: true);
     }
 
     public void Dispose()

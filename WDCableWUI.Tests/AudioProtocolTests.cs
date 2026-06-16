@@ -89,4 +89,25 @@ public sealed class AudioProtocolTests
         ]));
         Assert.IsFalse(AudioProtocol.PeerSupportsAudio([ProtocolConstants.CapabilityAudioLink]));
     }
+
+    [TestMethod]
+    public void StopMetadataCarriesReasonAndStreamId()
+    {
+        var metadata = AudioProtocol.ParseMetadata(AudioProtocol.Stop(77, "local_stop"));
+
+        Assert.AreEqual(AudioProtocol.KindStop, AudioProtocol.OptionalString(metadata, "kind"));
+        Assert.AreEqual(77, AudioProtocol.OptionalInt64(metadata, "streamId"));
+        Assert.AreEqual("local_stop", AudioProtocol.OptionalString(metadata, "reason"));
+    }
+
+    [TestMethod]
+    public void TransportWithMissingPortParsesAsInvalidPort()
+    {
+        var metadata = AudioProtocol.ParseMetadata("""{"kind":"audio.transport","streamId":4,"transport":"tcp"}""");
+        var transport = AudioProtocol.ParseTransport(metadata);
+
+        Assert.AreEqual(4, transport.StreamId);
+        Assert.AreEqual(AudioProtocol.TransportTcp, transport.Transport);
+        Assert.AreEqual(-1, transport.Port);
+    }
 }

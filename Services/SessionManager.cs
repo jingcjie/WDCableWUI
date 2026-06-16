@@ -395,7 +395,7 @@ public sealed class SessionManager : IDisposable
 
         try
         {
-            listener?.Close();
+            listener?.Dispose();
         }
         catch
         {
@@ -404,6 +404,7 @@ public sealed class SessionManager : IDisposable
         try
         {
             transport?.Cancel();
+            transport?.Dispose();
         }
         catch
         {
@@ -1033,11 +1034,16 @@ public sealed class SessionManager : IDisposable
             }
 
             _lastDisconnectReason = reason;
-            _sessionCancellationTokenSource?.Cancel();
+            var sessionCancellationTokenSource = _sessionCancellationTokenSource;
+            _sessionCancellationTokenSource = null;
+            sessionCancellationTokenSource?.Cancel();
             CloseAudioTransport();
             _transportAdapter?.Cancel();
+            _transportAdapter?.Dispose();
+            _transportAdapter = new TcpSessionTransportAdapter();
             _runtime?.Close();
             _runtime = null;
+            sessionCancellationTokenSource?.Dispose();
             TransitionTo(SessionPhase.Failed, link, reason);
 
             var message = exception.Message;
@@ -1265,6 +1271,7 @@ public sealed class SessionManager : IDisposable
             try
             {
                 transport.Cancel();
+                transport.Dispose();
             }
             catch
             {
@@ -1341,6 +1348,7 @@ public sealed class SessionManager : IDisposable
                 try
                 {
                     transport.Cancel();
+                    transport.Dispose();
                 }
                 catch
                 {

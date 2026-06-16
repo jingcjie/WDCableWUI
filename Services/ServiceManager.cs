@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Net.NetworkInformation;
 using System.Threading.Tasks;
+using Windows.ApplicationModel.Resources;
 
 namespace WDCableWUI.Services
 {
@@ -13,7 +14,7 @@ namespace WDCableWUI.Services
     /// </summary>
     public static class ServiceManager
     {
-        private const string DefaultWiFiDirectUnavailableMessage = "WiFi Direct services are unavailable. Settings and saved app data remain available, but connection, chat, speed test, and file transfer features require WiFi Direct support.";
+        private const string DefaultWiFiDirectUnavailableMessage = "This WiFi adapter/driver does not support Windows WiFi Direct peer discovery required by WDCable.";
 
         private static DataManager? _dataManager;
         private static WiFiDirectService? _wifiDirectService;
@@ -146,7 +147,7 @@ namespace WDCableWUI.Services
         /// <summary>
         /// Gets a user-facing message for pages that depend on WiFi Direct services.
         /// </summary>
-        public static string ServiceUnavailableMessage => _serviceInitializationError ?? DefaultWiFiDirectUnavailableMessage;
+        public static string ServiceUnavailableMessage => _serviceInitializationError ?? GetLocalizedString("WiFiDirectUnavailable_PeerDiscoveryMessage", DefaultWiFiDirectUnavailableMessage);
         
         /// <summary>
         /// Initializes the ServiceManager with a singleton WiFiDirectService instance.
@@ -346,11 +347,25 @@ namespace WDCableWUI.Services
                 ? string.Empty
                 : $" Interface: {report.InterfaceName}.";
 
-            return "This WiFi adapter/driver does not fully support Windows WiFi Direct peer discovery required by WDCable." +
-                   " Try updating the WiFi driver or using another WiFi adapter." +
-                   interfaceName +
-                   $" Missing capability: {string.Join(", ", missingCapabilities)}." +
-                   $" Reported capabilities: {report.BuildRequiredCapabilitySummary()}.";
+            Debug.WriteLine("WiFi Direct capability check failed." +
+                            interfaceName +
+                            $" Missing capability: {string.Join(", ", missingCapabilities)}." +
+                            $" Reported capabilities: {report.BuildRequiredCapabilitySummary()}.");
+
+            return GetLocalizedString("WiFiDirectUnavailable_PeerDiscoveryMessage", DefaultWiFiDirectUnavailableMessage);
+        }
+
+        private static string GetLocalizedString(string resourceKey, string fallback)
+        {
+            try
+            {
+                var value = ResourceLoader.GetForViewIndependentUse().GetString(resourceKey);
+                return string.IsNullOrWhiteSpace(value) ? fallback : value;
+            }
+            catch
+            {
+                return fallback;
+            }
         }
 
         private static void HandleWiFiDirectInitializationFailure(string message, Exception exception)

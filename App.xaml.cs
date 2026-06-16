@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using WDCableWUI.Services;
+using Windows.ApplicationModel.Resources;
 using Windows.Globalization;
 using Windows.Storage;
 
@@ -209,9 +210,11 @@ namespace WDCableWUI
             
             var dialog = new ContentDialog()
              {
-                 Title = "WiFi Direct Unavailable",
-                 Content = $"{_serviceInitializationError}\n\nYou can still open pages and change Settings. Connection, chat, speed test, and file transfer features will remain disabled until WiFi Direct is available.",
-                 CloseButtonText = "OK",
+                 Title = GetLocalizedString("WiFiDirectUnavailable_Title", "WiFi Direct Unavailable"),
+                 Content = string.IsNullOrWhiteSpace(_serviceInitializationError)
+                    ? GetLocalizedString("WiFiDirectUnavailable_PeerDiscoveryMessage", ServiceManager.ServiceUnavailableMessage)
+                    : _serviceInitializationError,
+                 CloseButtonText = GetLocalizedString("Common_OK", "OK"),
                  XamlRoot = _window?.Content.XamlRoot
              };
             
@@ -222,6 +225,19 @@ namespace WDCableWUI
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"Failed to show error dialog: {ex.Message}");
+            }
+        }
+
+        private static string GetLocalizedString(string resourceKey, string fallback)
+        {
+            try
+            {
+                var value = ResourceLoader.GetForViewIndependentUse().GetString(resourceKey);
+                return string.IsNullOrWhiteSpace(value) ? fallback : value;
+            }
+            catch
+            {
+                return fallback;
             }
         }
         

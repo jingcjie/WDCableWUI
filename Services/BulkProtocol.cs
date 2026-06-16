@@ -54,15 +54,25 @@ public static class BulkProtocol
 
     public static string SafeFileName(string fileName)
     {
-        var candidate = Path.GetFileName(string.IsNullOrWhiteSpace(fileName) ? "unknown_file" : fileName.Trim());
-        if (string.IsNullOrWhiteSpace(candidate))
-        {
-            candidate = "unknown_file";
-        }
+        var input = string.IsNullOrWhiteSpace(fileName) ? "unknown_file" : fileName.Trim();
+        var separatorIndex = input.LastIndexOfAny(['\\', '/']);
+        var candidate = separatorIndex >= 0 ? input[(separatorIndex + 1)..] : input;
 
         foreach (var invalid in Path.GetInvalidFileNameChars())
         {
             candidate = candidate.Replace(invalid, '_');
+        }
+
+        candidate = candidate.Trim().TrimEnd('.', ' ');
+        if (string.IsNullOrWhiteSpace(candidate) || candidate is "." or "..")
+        {
+            candidate = "unknown_file";
+        }
+
+        var baseName = Path.GetFileNameWithoutExtension(candidate);
+        if (IsReservedWindowsDeviceName(baseName))
+        {
+            candidate = $"_{candidate}";
         }
 
         return candidate;
@@ -117,7 +127,25 @@ public static class BulkProtocol
 
     public static double CalculateMbps(long bytes, TimeSpan duration)
     {
+        bytes = Math.Max(bytes, 0);
         var seconds = Math.Max(duration.TotalSeconds, 0.001);
         return bytes * 8.0 / 1024 / 1024 / seconds;
+    }
+
+    private static bool IsReservedWindowsDeviceName(string value)
+    {
+        return value.Equals("CON", StringComparison.OrdinalIgnoreCase) ||
+               value.Equals("PRN", StringComparison.OrdinalIgnoreCase) ||
+               value.Equals("AUX", StringComparison.OrdinalIgnoreCase) ||
+               value.Equals("NUL", StringComparison.OrdinalIgnoreCase) ||
+               IsReservedDeviceRange(value, "COM") ||
+               IsReservedDeviceRange(value, "LPT");
+    }
+
+    private static bool IsReservedDeviceRange(string value, string prefix)
+    {
+        return value.Length == 4 &&
+               value.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) &&
+               value[3] is >= '1' and <= '9';
     }
 }
