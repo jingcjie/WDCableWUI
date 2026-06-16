@@ -117,6 +117,15 @@ namespace WDCableWUI.Services
                 _connectionListener.ConnectionRequested += OnConnectionRequested;
                 
                 _publisher.Start();
+
+                if (_publisher.Status != WiFiDirectAdvertisementPublisherStatus.Started)
+                {
+                    var status = _publisher.Status;
+                    CleanupAdvertisingResources();
+                    OnErrorOccurred($"Failed to start advertising: WiFi Direct publisher status is {status}");
+                    return Task.FromResult(false);
+                }
+
                 IsAdvertising = true;
                 
                 OnStatusChanged($"Advertising started. Device is discoverable as '{deviceName}'");
@@ -552,7 +561,25 @@ namespace WDCableWUI.Services
         private void OnAdvertisementStatusChanged(WiFiDirectAdvertisementPublisher sender, WiFiDirectAdvertisementPublisherStatusChangedEventArgs args)
         {
             _dispatcherQueue.TryEnqueue(() => {
-                OnStatusChanged($"Advertisement status: {args.Status}");
+                if (args.Status == WiFiDirectAdvertisementPublisherStatus.Started)
+                {
+                    IsAdvertising = true;
+                    OnStatusChanged("Advertisement status: Started");
+                }
+                else if (args.Status == WiFiDirectAdvertisementPublisherStatus.Aborted)
+                {
+                    CleanupAdvertisingResources();
+                    OnErrorOccurred($"WiFi Direct advertising aborted: {args.Error}");
+                }
+                else if (args.Status == WiFiDirectAdvertisementPublisherStatus.Stopped)
+                {
+                    IsAdvertising = false;
+                    OnStatusChanged("Advertisement status: Stopped");
+                }
+                else
+                {
+                    OnStatusChanged($"Advertisement status: {args.Status}");
+                }
             });
         }
 

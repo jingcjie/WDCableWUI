@@ -1,4 +1,8 @@
 using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Linq;
+using System.Net.NetworkInformation;
 using System.Threading.Tasks;
 
 namespace WDCableWUI.Services
@@ -176,10 +180,7 @@ namespace WDCableWUI.Services
 
                 try
                 {
-                    // Probe WiFi Direct support before constructing the service graph. Some
-                    // unsupported systems fail here rather than during service construction.
-                    _ = Windows.Devices.WiFiDirect.WiFiDirectDevice.GetDeviceSelector(
-                        Windows.Devices.WiFiDirect.WiFiDirectDeviceSelectorType.AssociationEndpoint);
+                    ValidateWiFiDirectSupport();
 
                     _wifiDirectService = new WiFiDirectService();
                     _sessionManager = WDCableWUI.Services.SessionManager.Instance;
@@ -207,6 +208,10 @@ namespace WDCableWUI.Services
                     // WiFi Direct access denied
                     HandleWiFiDirectInitializationFailure("WiFi Direct access is denied. Please check that WiFi is enabled and the app has the required permissions.", uaEx);
                 }
+                catch (NotSupportedException nsEx)
+                {
+                    HandleWiFiDirectInitializationFailure(nsEx.Message, nsEx);
+                }
                 catch (Exception ex)
                 {
                     // Check if the inner exception or message indicates WiFi Direct is not supported
@@ -220,6 +225,132 @@ namespace WDCableWUI.Services
                     }
                 }
             }
+        }
+
+        private static void ValidateWiFiDirectSupport()
+        {
+            // Selector creation catches machines where the WinRT WiFi Direct API itself is
+            // unavailable. The netsh capability probe catches adapters whose driver exposes
+            // only partial WiFi Direct support, such as no P2P device discovery.
+            _ = Windows.Devices.WiFiDirect.WiFiDirectDevice.GetDeviceSelector(
+                Windows.Devices.WiFiDirect.WiFiDirectDeviceSelectorType.AssociationEndpoint);
+
+            if (!HasWirelessAdapter())
+            {
+                throw new NotSupportedException("WiFi Direct is not supported on this system because no WiFi adapter was found. Check that Windows, the wireless adapter, and WiFi Direct drivers support WiFi Direct.");
+            }
+
+            var capabilityReport = TryReadWirelessCapabilityReport();
+            if (capabilityReport == null)
+            {
+                return;
+            }
+
+            var missingCapabilities = capabilityReport.GetMissingRequiredCapabilities();
+            if (missingCapabilities.Count == 0)
+            {
+                return;
+            }
+
+            throw new NotSupportedException(BuildUnsupportedCapabilityMessage(capabilityReport, missingCapabilities));
+        }
+
+        private static bool HasWirelessAdapter()
+        {
+            return NetworkInterface.GetAllNetworkInterfaces()
+                .Any(adapter => adapter.NetworkInterfaceType == NetworkInterfaceType.Wireless80211);
+        }
+
+        private static WiFiDirectCapabilityReport? TryReadWirelessCapabilityReport()
+        {
+            try
+            {
+                var output = RunNetsh("wlan", "show", "wirelesscapabilities");
+                if (string.IsNullOrWhiteSpace(output))
+                {
+                    return null;
+                }
+
+                var report = WiFiDirectCapabilityReport.Parse(output);
+                var hasKnownCapabilityLabels = WiFiDirectCapabilityReport.RequiredCapabilities
+                    .Any(capability => report.GetCapabilityValue(capability) != null);
+
+                if (!hasKnownCapabilityLabels)
+                {
+                    Debug.WriteLine("WiFi Direct capability probe did not contain expected labels; skipping strict capability validation.");
+                    return null;
+                }
+
+                return report;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"WiFi Direct capability probe failed: {ex}");
+                return null;
+            }
+        }
+
+        private static string RunNetsh(params string[] arguments)
+        {
+            using var process = new Process();
+            process.StartInfo = new ProcessStartInfo
+            {
+                FileName = "netsh.exe",
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true
+            };
+
+            foreach (var argument in arguments)
+            {
+                process.StartInfo.ArgumentList.Add(argument);
+            }
+
+            if (!process.Start())
+            {
+                throw new InvalidOperationException("Could not start netsh.exe.");
+            }
+
+            var outputTask = process.StandardOutput.ReadToEndAsync();
+            var errorTask = process.StandardError.ReadToEndAsync();
+            if (!process.WaitForExit(5000))
+            {
+                try
+                {
+                    process.Kill(entireProcessTree: true);
+                }
+                catch
+                {
+                }
+
+                throw new TimeoutException("Timed out while reading wireless capabilities.");
+            }
+
+            var output = outputTask.GetAwaiter().GetResult();
+            var error = errorTask.GetAwaiter().GetResult();
+
+            if (process.ExitCode != 0)
+            {
+                throw new InvalidOperationException($"netsh exited with code {process.ExitCode}: {error}");
+            }
+
+            return output;
+        }
+
+        private static string BuildUnsupportedCapabilityMessage(
+            WiFiDirectCapabilityReport report,
+            IReadOnlyList<string> missingCapabilities)
+        {
+            var interfaceName = string.IsNullOrWhiteSpace(report.InterfaceName)
+                ? string.Empty
+                : $" Interface: {report.InterfaceName}.";
+
+            return "This WiFi adapter/driver does not fully support Windows WiFi Direct peer discovery required by WDCable." +
+                   " Try updating the WiFi driver or using another WiFi adapter." +
+                   interfaceName +
+                   $" Missing capability: {string.Join(", ", missingCapabilities)}." +
+                   $" Reported capabilities: {report.BuildRequiredCapabilitySummary()}.";
         }
 
         private static void HandleWiFiDirectInitializationFailure(string message, Exception exception)

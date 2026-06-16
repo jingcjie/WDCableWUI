@@ -19,6 +19,7 @@
     <Compile Include="..\Services\AudioProtocol.cs" Link="Services\%(Filename)%(Extension)" />
     <Compile Include="..\Services\JitterBuffer.cs" Link="Services\%(Filename)%(Extension)" />
     <Compile Include="..\Services\ChatProtocol.cs" Link="Services\%(Filename)%(Extension)" />
+    <Compile Include="..\Services\WiFiDirectCapabilityReport.cs" Link="Services\%(Filename)%(Extension)" />
     <Compile Include="..\Services\SessionPhase.cs" Link="Services\%(Filename)%(Extension)" />
     <Compile Include="..\Services\SessionStateMachine.cs" Link="Services\%(Filename)%(Extension)" />
   </ItemGroup>
