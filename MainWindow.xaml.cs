@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -16,6 +17,7 @@ using Microsoft.UI.Windowing;
 using Microsoft.UI;
 using WinRT.Interop;
 using System.Diagnostics;
+using Windows.ApplicationModel;
 
 namespace WDCableWUI
 {
@@ -81,14 +83,55 @@ namespace WDCableWUI
             var hWnd = WindowNative.GetWindowHandle(this);
             var windowId = Win32Interop.GetWindowIdFromWindow(hWnd);
             var appWindow = AppWindow.GetFromWindowId(windowId);
-            
-            
+            SetWindowIcon(appWindow);
             
             // Customize title bar appearance
             if (appWindow.TitleBar != null)
             {
                 appWindow.TitleBar.ButtonBackgroundColor = Colors.Transparent;
                 appWindow.TitleBar.ButtonInactiveBackgroundColor = Colors.Transparent;
+            }
+        }
+
+        private static void SetWindowIcon(AppWindow appWindow)
+        {
+            foreach (var iconPath in GetWindowIconPaths())
+            {
+                if (!File.Exists(iconPath))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    appWindow.SetIcon(iconPath);
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"Failed to set window icon from '{iconPath}': {ex.Message}");
+                }
+            }
+        }
+
+        private static IEnumerable<string> GetWindowIconPaths()
+        {
+            yield return Path.Combine(AppContext.BaseDirectory, "Assets", "WDCable.ico");
+            yield return Path.Combine(AppContext.BaseDirectory, "AppX", "Assets", "WDCable.ico");
+            yield return Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "Assets", "WDCable.ico"));
+
+            string? packageIconPath = null;
+            try
+            {
+                packageIconPath = Path.Combine(Package.Current.InstalledLocation.Path, "Assets", "WDCable.ico");
+            }
+            catch
+            {
+            }
+
+            if (!string.IsNullOrEmpty(packageIconPath))
+            {
+                yield return packageIconPath;
             }
         }
         

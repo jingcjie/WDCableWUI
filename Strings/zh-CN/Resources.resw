@@ -131,8 +131,8 @@
   <data name="Settings_About_Copyright.Text" xml:space="preserve">
     <value>© 2025 WiFi直连线缆。保留所有权利。</value>
   </data>
-  <data name="Settings_About_Version.Text" xml:space="preserve">
-    <value>版本 1.0.0</value>
+  <data name="Settings_About_Version_Format" xml:space="preserve">
+    <value>版本 {0}</value>
   </data>
   
   <!-- GitHub Repository Section -->

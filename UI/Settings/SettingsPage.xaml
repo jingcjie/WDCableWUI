@@ -156,7 +156,6 @@
                                 <TextBlock x:Uid="Settings_About_AppName"
                                           Style="{StaticResource BodyStrongTextBlockStyle}"/>
                                 <TextBlock x:Name="VersionTextBlock"
-                                          x:Uid="Settings_About_Version"
                                           Style="{StaticResource CaptionTextBlockStyle}"
                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                             </StackPanel>

@@ -131,8 +131,8 @@
   <data name="Settings_About_Copyright.Text" xml:space="preserve">
     <value>© 2025 WiFi Direct Cable. All rights reserved.</value>
   </data>
-  <data name="Settings_About_Version.Text" xml:space="preserve">
-    <value>Version 1.0.0</value>
+  <data name="Settings_About_Version_Format" xml:space="preserve">
+    <value>Version {0}</value>
   </data>
   
   <!-- GitHub Repository Section -->

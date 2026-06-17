@@ -2,8 +2,13 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
 using System;
+using System.Diagnostics;
+using System.IO;
+using System.Xml.Linq;
 using Windows.Storage;
 using Windows.System;
+using Windows.ApplicationModel;
+using Windows.ApplicationModel.Resources;
 using WDCableWUI.Services;
 
 namespace WDCableWUI.UI.Settings
@@ -16,6 +21,7 @@ namespace WDCableWUI.UI.Settings
         public SettingsPage()
         {
             this.InitializeComponent();
+            UpdateAboutVersion();
             InitializeDataManager();
             LoadSettingsWithoutSelectionSideEffects();
         }
@@ -36,8 +42,86 @@ namespace WDCableWUI.UI.Settings
         protected override void OnNavigatedTo(NavigationEventArgs e)
         {
             base.OnNavigatedTo(e);
+            UpdateAboutVersion();
             InitializeDataManager();
             LoadSettingsWithoutSelectionSideEffects();
+        }
+
+        private void UpdateAboutVersion()
+        {
+            var version = GetCurrentAppVersion();
+            var format = GetVersionFormat();
+            VersionTextBlock.Text = string.Format(System.Globalization.CultureInfo.CurrentCulture, format, version);
+        }
+
+        private static string GetVersionFormat()
+        {
+            try
+            {
+                var resourceLoader = ResourceLoader.GetForCurrentView();
+                var format = resourceLoader.GetString("Settings_About_Version_Format");
+                if (!string.IsNullOrWhiteSpace(format))
+                {
+                    return format;
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Failed to load version format resource: {ex.Message}");
+            }
+
+            return "Version {0}";
+        }
+
+        private static string GetCurrentAppVersion()
+        {
+            try
+            {
+                var version = Package.Current.Id.Version;
+                return $"{version.Major}.{version.Minor}.{version.Build}.{version.Revision}";
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Failed to read package version: {ex.Message}");
+            }
+
+            var manifestVersion = TryReadManifestVersion(Path.Combine(AppContext.BaseDirectory, "AppxManifest.xml"))
+                ?? TryReadManifestVersion(Path.Combine(AppContext.BaseDirectory, "AppX", "AppxManifest.xml"));
+            if (!string.IsNullOrWhiteSpace(manifestVersion))
+            {
+                return manifestVersion;
+            }
+
+            var assemblyVersion = typeof(SettingsPage).Assembly.GetName().Version;
+            if (assemblyVersion == null)
+            {
+                return "unknown";
+            }
+
+            var build = Math.Max(assemblyVersion.Build, 0);
+            var revision = Math.Max(assemblyVersion.Revision, 0);
+            return $"{assemblyVersion.Major}.{assemblyVersion.Minor}.{build}.{revision}";
+        }
+
+        private static string? TryReadManifestVersion(string manifestPath)
+        {
+            if (!File.Exists(manifestPath))
+            {
+                return null;
+            }
+
+            try
+            {
+                var document = XDocument.Load(manifestPath);
+                XNamespace appxNamespace = "http://schemas.microsoft.com/appx/manifest/foundation/windows10";
+                return document.Root?.Element(appxNamespace + "Identity")?.Attribute("Version")?.Value;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Failed to read app manifest version from '{manifestPath}': {ex.Message}");
+            }
+
+            return null;
         }
 
         private void LoadSettingsWithoutSelectionSideEffects()
