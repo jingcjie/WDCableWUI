@@ -155,6 +155,88 @@
     <value>WDCable Flutter - Cross-platform mobile app</value>
   </data>
   
+  <!-- Wi-Fi Direct Reset Section -->
+  <data name="Settings_WiFiDirectReset_Title.Text" xml:space="preserve">
+    <value>Reset Wi-Fi Direct</value>
+  </data>
+  <data name="Settings_WiFiDirectReset_Description.Text" xml:space="preserve">
+    <value>Disconnect WDCable, stop Wi-Fi Direct activity, forget paired Wi-Fi Direct devices, and restart the app.</value>
+  </data>
+  <data name="Settings_WiFiDirectReset_Warning.Message" xml:space="preserve">
+    <value>This forgets all paired Wi-Fi Direct devices, including devices used by Miracast, printers, or other apps. Saved Wi-Fi networks and Windows virtual adapters are not removed.</value>
+  </data>
+  <data name="Settings_WiFiDirectReset_Button.Content" xml:space="preserve">
+    <value>Reset and restart</value>
+  </data>
+  <data name="Settings_WiFiDirectReset_Status.Text" xml:space="preserve">
+    <value>Wi-Fi Direct cleanup status</value>
+  </data>
+  <data name="Settings_WiFiDirectReset_Confirm_Title" xml:space="preserve">
+    <value>Reset Wi-Fi Direct?</value>
+  </data>
+  <data name="Settings_WiFiDirectReset_Confirm_Content" xml:space="preserve">
+    <value>WDCable will disconnect, stop Wi-Fi Direct, and forget every paired Wi-Fi Direct device. This can include Miracast displays, printers, and devices paired by other apps. Saved Wi-Fi networks will not be changed. The app will then restart.</value>
+  </data>
+  <data name="Settings_WiFiDirectReset_Confirm_Primary" xml:space="preserve">
+    <value>Reset and restart</value>
+  </data>
+  <data name="Settings_WiFiDirectReset_Status_Running" xml:space="preserve">
+    <value>Disconnecting and cleaning Wi-Fi Direct pairings...</value>
+  </data>
+  <data name="Settings_WiFiDirectReset_Status_Complete_Format" xml:space="preserve">
+    <value>Cleanup complete: {0} paired devices found, {1} removed, {2} failed.</value>
+  </data>
+  <data name="Settings_WiFiDirectReset_RestartFailed_Title" xml:space="preserve">
+    <value>Manual restart required</value>
+  </data>
+  <data name="Settings_WiFiDirectReset_RestartFailed_Content_Format" xml:space="preserve">
+    <value>Wi-Fi Direct cleanup completed, but WDCable could not restart automatically ({0}). Paired devices found: {1}; removed: {2}; failed: {3}. Please start WDCable again manually.</value>
+  </data>
+
+  <!-- Wi-Fi Direct Adapter Removal Section -->
+  <data name="Settings_WiFiDirectAdapterRemoval_Title.Text" xml:space="preserve">
+    <value>Remove stale Wi-Fi Direct adapters</value>
+  </data>
+  <data name="Settings_WiFiDirectAdapterRemoval_Description.Text" xml:space="preserve">
+    <value>Remove only old, non-present, explicitly numbered Microsoft Wi-Fi Direct Virtual Adapter entries left during development.</value>
+  </data>
+  <data name="Settings_WiFiDirectAdapterRemoval_Warning.Message" xml:space="preserve">
+    <value>Administrator permission is required. Active and disconnected operational Wi-Fi Direct adapters are preserved.</value>
+  </data>
+  <data name="Settings_WiFiDirectAdapterRemoval_Button.Content" xml:space="preserve">
+    <value>Remove stale adapters and restart</value>
+  </data>
+  <data name="Settings_WiFiDirectAdapterRemoval_Status.Text" xml:space="preserve">
+    <value>Wi-Fi Direct adapter removal status</value>
+  </data>
+  <data name="Settings_WiFiDirectAdapterRemoval_Confirm_Title" xml:space="preserve">
+    <value>Remove stale Wi-Fi Direct adapters?</value>
+  </data>
+  <data name="Settings_WiFiDirectAdapterRemoval_Confirm_Content" xml:space="preserve">
+    <value>WDCable will close and request administrator permission. Only non-present, explicitly numbered Microsoft Wi-Fi Direct Virtual Adapter entries will be removed. Active and disconnected operational adapters will be preserved, then WDCable will restart.</value>
+  </data>
+  <data name="Settings_WiFiDirectAdapterRemoval_Confirm_Primary" xml:space="preserve">
+    <value>Remove stale adapters</value>
+  </data>
+  <data name="Settings_WiFiDirectAdapterRemoval_Status_RequestingElevation" xml:space="preserve">
+    <value>Requesting administrator permission...</value>
+  </data>
+  <data name="Settings_WiFiDirectAdapterRemoval_Status_Closing" xml:space="preserve">
+    <value>Closing WDCable. The elevated tool will remove stale numbered adapters and restart the app.</value>
+  </data>
+  <data name="Settings_WiFiDirectAdapterRemoval_Error_Title" xml:space="preserve">
+    <value>Adapter removal could not start</value>
+  </data>
+  <data name="Settings_WiFiDirectAdapterRemoval_Error_NoExecutable" xml:space="preserve">
+    <value>WDCable could not determine its executable path.</value>
+  </data>
+  <data name="Settings_WiFiDirectAdapterRemoval_Error_ElevationCanceled" xml:space="preserve">
+    <value>Administrator permission was canceled. No adapters were removed.</value>
+  </data>
+  <data name="Settings_WiFiDirectAdapterRemoval_Error_LaunchFailed_Format" xml:space="preserve">
+    <value>Could not start adapter cleanup: {0}</value>
+  </data>
+
   <!-- FileTransfer Page Additional -->
   <data name="FileTransfer_Browse_Button.Content" xml:space="preserve">
     <value>Browse</value>
@@ -476,5 +558,8 @@
   </data>
   <data name="Common_OK" xml:space="preserve">
     <value>OK</value>
+  </data>
+  <data name="Common_Cancel" xml:space="preserve">
+    <value>Cancel</value>
   </data>
 </root>

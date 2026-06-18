@@ -71,6 +71,88 @@
                 </StackPanel>
             </Border>
 
+            <!-- Wi-Fi Direct Reset Section -->
+            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                   BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                   BorderThickness="1"
+                   CornerRadius="8"
+                   Padding="24">
+                <StackPanel Spacing="16">
+                    <StackPanel Spacing="4">
+                        <TextBlock x:Uid="Settings_WiFiDirectReset_Title"
+                                  Style="{StaticResource SubtitleTextBlockStyle}"/>
+                        <TextBlock x:Uid="Settings_WiFiDirectReset_Description"
+                                  Style="{StaticResource CaptionTextBlockStyle}"
+                                  Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                  TextWrapping="Wrap"/>
+                    </StackPanel>
+
+                    <InfoBar x:Uid="Settings_WiFiDirectReset_Warning"
+                             IsOpen="True"
+                             IsClosable="False"
+                             Severity="Warning"/>
+
+                    <StackPanel Orientation="Horizontal" Spacing="12">
+                        <Button x:Name="ResetWiFiDirectButton"
+                                x:Uid="Settings_WiFiDirectReset_Button"
+                                Click="ResetWiFiDirectButton_Click"/>
+                        <ProgressRing x:Name="ResetWiFiDirectProgressRing"
+                                      Width="20"
+                                      Height="20"
+                                      IsActive="False"
+                                      Visibility="Collapsed"/>
+                    </StackPanel>
+
+                    <TextBlock x:Name="ResetWiFiDirectStatusText"
+                               x:Uid="Settings_WiFiDirectReset_Status"
+                               Style="{StaticResource CaptionTextBlockStyle}"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                               TextWrapping="Wrap"
+                               Visibility="Collapsed"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Wi-Fi Direct Adapter Removal Section -->
+            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                   BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                   BorderThickness="1"
+                   CornerRadius="8"
+                   Padding="24">
+                <StackPanel Spacing="16">
+                    <StackPanel Spacing="4">
+                        <TextBlock x:Uid="Settings_WiFiDirectAdapterRemoval_Title"
+                                  Style="{StaticResource SubtitleTextBlockStyle}"/>
+                        <TextBlock x:Uid="Settings_WiFiDirectAdapterRemoval_Description"
+                                  Style="{StaticResource CaptionTextBlockStyle}"
+                                  Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                  TextWrapping="Wrap"/>
+                    </StackPanel>
+
+                    <InfoBar x:Uid="Settings_WiFiDirectAdapterRemoval_Warning"
+                             IsOpen="True"
+                             IsClosable="False"
+                             Severity="Warning"/>
+
+                    <StackPanel Orientation="Horizontal" Spacing="12">
+                        <Button x:Name="RemoveWiFiDirectAdaptersButton"
+                                x:Uid="Settings_WiFiDirectAdapterRemoval_Button"
+                                Click="RemoveWiFiDirectAdaptersButton_Click"/>
+                        <ProgressRing x:Name="RemoveWiFiDirectAdaptersProgressRing"
+                                      Width="20"
+                                      Height="20"
+                                      IsActive="False"
+                                      Visibility="Collapsed"/>
+                    </StackPanel>
+
+                    <TextBlock x:Name="RemoveWiFiDirectAdaptersStatusText"
+                               x:Uid="Settings_WiFiDirectAdapterRemoval_Status"
+                               Style="{StaticResource CaptionTextBlockStyle}"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                               TextWrapping="Wrap"
+                               Visibility="Collapsed"/>
+                </StackPanel>
+            </Border>
+
             <!-- GitHub Repository Section -->
             <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Net.NetworkInformation;
+using System.Threading;
 using System.Threading.Tasks;
 using Windows.ApplicationModel.Resources;
 
@@ -25,6 +26,7 @@ namespace WDCableWUI.Services
         private static FileTransferService? _fileTransferService;
         private static AudioService? _audioService;
         private static readonly object _lock = new object();
+        private static readonly SemaphoreSlim LifecycleSemaphore = new(1, 1);
         private static bool _isInitialized = false;
         private static bool _areWiFiDirectServicesAvailable = false;
         private static string? _serviceInitializationError;
@@ -395,72 +397,219 @@ namespace WDCableWUI.Services
             _audioService = WDCableWUI.Services.AudioService.Instance;
         }
 
+        private static void DisposeFeatureServices()
+        {
+            TryDispose(ChatService.ResetInstance, "ChatService");
+            _chatService = null;
+
+            TryDispose(SpeedTestService.ResetInstance, "SpeedTestService");
+            _speedTestService = null;
+
+            TryDispose(FileTransferService.ResetInstance, "FileTransferService");
+            _fileTransferService = null;
+
+            TryDispose(WDCableWUI.Services.AudioService.ResetInstance, "AudioService");
+            _audioService = null;
+        }
+
         private static void DisposeWiFiDirectServices()
         {
-            try
+            DisposeFeatureServices();
+
+            TryDispose(ConnectionService.ResetInstance, "ConnectionService");
+            _connectionService = null;
+
+            TryDispose(SessionManager.ResetInstance, "SessionManager");
+            _sessionManager = null;
+
+            if (_wifiDirectService != null)
             {
-                _chatService?.Dispose();
-                _chatService = null;
-
-                _speedTestService?.Dispose();
-                _speedTestService = null;
-
-                _fileTransferService?.Dispose();
-                _fileTransferService = null;
-
-                _audioService?.Dispose();
-                _audioService = null;
-
-                ChatService.ResetInstance();
-                SpeedTestService.ResetInstance();
-                FileTransferService.ResetInstance();
-                WDCableWUI.Services.AudioService.ResetInstance();
-
-                _connectionService = null;
-                ConnectionService.ResetInstance();
-
-                _sessionManager = null;
-                SessionManager.ResetInstance();
-
-                _wifiDirectService?.Dispose();
-                _wifiDirectService = null;
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"Error disposing WiFi Direct services: {ex.Message}");
-            }
-        }
-        
-        /// <summary>
-        /// Shuts down the ServiceManager and disposes of all services.
-        /// This should be called during application shutdown.
-        /// </summary>
-        public static void Shutdown()
-        {
-            lock (_lock)
-            {
-                if (!_isInitialized)
-                {
-                    return; // Already shut down or never initialized
-                }
-                
                 try
                 {
-                    DisposeWiFiDirectServices();
-                    
-                    // Finally dispose DataManager
-                    _dataManager = null;
-                    DataManager.ResetInstance();
-                    
-                    _serviceInitializationError = null;
-                    _areWiFiDirectServicesAvailable = false;
-                    _isInitialized = false;
+                    _wifiDirectService.Dispose();
                 }
                 catch (Exception ex)
                 {
-                    // Log error but don't throw during shutdown
-                    System.Diagnostics.Debug.WriteLine($"Error during ServiceManager shutdown: {ex.Message}");
+                    Debug.WriteLine($"Error disposing WiFiDirectService: {ex}");
                 }
+                finally
+                {
+                    _wifiDirectService = null;
+                }
+            }
+        }
+
+        public static async Task<WiFiDirectCleanupResult> ResetWiFiDirectAsync(
+            CancellationToken cancellationToken = default)
+        {
+            await LifecycleSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                var coordinator = new WiFiDirectCleanupCoordinator(
+                    new ServiceManagerCleanupLifecycle(),
+                    new WindowsWiFiDirectPeerStore(),
+                    message => Debug.WriteLine(message));
+                return await coordinator
+                    .CleanupAsync(cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            finally
+            {
+                LifecycleSemaphore.Release();
+            }
+        }
+
+        /// <summary>
+        /// Stops active work and releases all application services before process exit.
+        /// </summary>
+        public static async Task ShutdownAsync(
+            string reason = "app_shutdown",
+            CancellationToken cancellationToken = default)
+        {
+            await LifecycleSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                if (!_isInitialized &&
+                    _wifiDirectService == null &&
+                    _sessionManager == null &&
+                    _dataManager == null)
+                {
+                    return;
+                }
+
+                await StopFeatureActivityCoreAsync(cancellationToken).ConfigureAwait(false);
+                await DisconnectCoreAsync(reason, cancellationToken).ConfigureAwait(false);
+                await StopWiFiDirectCoreAsync(reason, cancellationToken).ConfigureAwait(false);
+                await DisposeServicesCoreAsync(cancellationToken).ConfigureAwait(false);
+            }
+            finally
+            {
+                LifecycleSemaphore.Release();
+            }
+        }
+
+        private static async Task StopFeatureActivityCoreAsync(CancellationToken cancellationToken)
+        {
+            if (_audioService != null)
+            {
+                try
+                {
+                    await _audioService.StopAsync(cancellationToken).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"Error stopping AudioService: {ex}");
+                }
+            }
+
+            DisposeFeatureServices();
+        }
+
+        private static async Task DisconnectCoreAsync(
+            string reason,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (_sessionManager != null)
+            {
+                try
+                {
+                    await _sessionManager.DisconnectAsync(reason).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"Error disconnecting WDCable session: {ex}");
+                }
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (_wifiDirectService != null)
+            {
+                try
+                {
+                    await _wifiDirectService.DisconnectAsync(reason).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"Error disconnecting Wi-Fi Direct: {ex}");
+                }
+            }
+        }
+
+        private static async Task StopWiFiDirectCoreAsync(
+            string reason,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (_wifiDirectService == null)
+            {
+                return;
+            }
+
+            try
+            {
+                await _wifiDirectService.StopInfrastructureAsync(reason).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error stopping Wi-Fi Direct infrastructure: {ex}");
+            }
+        }
+
+        private static Task DisposeServicesCoreAsync(CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            DisposeWiFiDirectServices();
+
+            TryDispose(DataManager.ResetInstance, "DataManager");
+            _dataManager = null;
+
+            _serviceInitializationError = null;
+            _areWiFiDirectServicesAvailable = false;
+            _isInitialized = false;
+            return Task.CompletedTask;
+        }
+
+        private static void TryDispose(Action dispose, string serviceName)
+        {
+            try
+            {
+                dispose();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error disposing {serviceName}: {ex}");
+            }
+        }
+
+        private sealed class ServiceManagerCleanupLifecycle : IWiFiDirectCleanupLifecycle
+        {
+            public Task StopFeatureActivityAsync(CancellationToken cancellationToken)
+            {
+                return StopFeatureActivityCoreAsync(cancellationToken);
+            }
+
+            public Task DisconnectAsync(CancellationToken cancellationToken)
+            {
+                return DisconnectCoreAsync("wifi_direct_reset", cancellationToken);
+            }
+
+            public Task StopWiFiDirectAsync(CancellationToken cancellationToken)
+            {
+                return StopWiFiDirectCoreAsync("wifi_direct_reset", cancellationToken);
+            }
+
+            public Task DisposeServicesAsync(CancellationToken cancellationToken)
+            {
+                return DisposeServicesCoreAsync(cancellationToken);
             }
         }
         

@@ -28,7 +28,10 @@ namespace WDCableWUI
     {
         private readonly Dictionary<string, Type> _pageTypes;
         private SessionManager? _subscribedSessionManager;
+        private AppWindow? _appWindow;
         private bool _connectionPromptActive;
+        private bool _windowShutdownInProgress;
+        private bool _allowWindowClose;
         
         public MainWindow()
         {
@@ -84,14 +87,47 @@ namespace WDCableWUI
             // Get the AppWindow for additional customization
             var hWnd = WindowNative.GetWindowHandle(this);
             var windowId = Win32Interop.GetWindowIdFromWindow(hWnd);
-            var appWindow = AppWindow.GetFromWindowId(windowId);
-            SetWindowIcon(appWindow);
+            _appWindow = AppWindow.GetFromWindowId(windowId);
+            _appWindow.Closing += OnAppWindowClosing;
+            SetWindowIcon(_appWindow);
             
             // Customize title bar appearance
-            if (appWindow.TitleBar != null)
+            if (_appWindow.TitleBar != null)
             {
-                appWindow.TitleBar.ButtonBackgroundColor = Colors.Transparent;
-                appWindow.TitleBar.ButtonInactiveBackgroundColor = Colors.Transparent;
+                _appWindow.TitleBar.ButtonBackgroundColor = Colors.Transparent;
+                _appWindow.TitleBar.ButtonInactiveBackgroundColor = Colors.Transparent;
+            }
+        }
+
+        private async void OnAppWindowClosing(AppWindow sender, AppWindowClosingEventArgs args)
+        {
+            if (_allowWindowClose)
+            {
+                sender.Closing -= OnAppWindowClosing;
+                return;
+            }
+
+            args.Cancel = true;
+            if (_windowShutdownInProgress)
+            {
+                return;
+            }
+
+            _windowShutdownInProgress = true;
+            UnsubscribeFromWiFiDirectEvents();
+
+            try
+            {
+                await ServiceManager.ShutdownAsync("window_closing");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Window shutdown cleanup failed: {ex}");
+            }
+            finally
+            {
+                _allowWindowClose = true;
+                Close();
             }
         }
 

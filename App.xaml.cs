@@ -241,12 +241,5 @@ namespace WDCableWUI
             }
         }
         
-        /// <summary>
-        /// Cleanup when application is closing.
-        /// </summary>
-        ~App()
-        {
-            ServiceManager.Shutdown();
-        }
     }
 }

@@ -155,6 +155,88 @@
     <value>WDCable Flutter - 跨平台移动应用</value>
   </data>
   
+  <!-- Wi-Fi Direct Reset Section -->
+  <data name="Settings_WiFiDirectReset_Title.Text" xml:space="preserve">
+    <value>重置 Wi-Fi 直连</value>
+  </data>
+  <data name="Settings_WiFiDirectReset_Description.Text" xml:space="preserve">
+    <value>断开 WDCable，停止 Wi-Fi 直连活动，清除已配对的 Wi-Fi 直连设备，然后重新启动应用。</value>
+  </data>
+  <data name="Settings_WiFiDirectReset_Warning.Message" xml:space="preserve">
+    <value>这会清除所有已配对的 Wi-Fi 直连设备，包括 Miracast、打印机或其他应用使用的设备。已保存的 Wi-Fi 网络和 Windows 虚拟适配器不会被删除。</value>
+  </data>
+  <data name="Settings_WiFiDirectReset_Button.Content" xml:space="preserve">
+    <value>重置并重新启动</value>
+  </data>
+  <data name="Settings_WiFiDirectReset_Status.Text" xml:space="preserve">
+    <value>Wi-Fi 直连清理状态</value>
+  </data>
+  <data name="Settings_WiFiDirectReset_Confirm_Title" xml:space="preserve">
+    <value>重置 Wi-Fi 直连？</value>
+  </data>
+  <data name="Settings_WiFiDirectReset_Confirm_Content" xml:space="preserve">
+    <value>WDCable 将断开连接、停止 Wi-Fi 直连，并清除所有已配对的 Wi-Fi 直连设备。这可能包括 Miracast 显示器、打印机以及其他应用配对的设备。已保存的 Wi-Fi 网络不会改变。完成后应用将重新启动。</value>
+  </data>
+  <data name="Settings_WiFiDirectReset_Confirm_Primary" xml:space="preserve">
+    <value>重置并重新启动</value>
+  </data>
+  <data name="Settings_WiFiDirectReset_Status_Running" xml:space="preserve">
+    <value>正在断开连接并清理 Wi-Fi 直连配对...</value>
+  </data>
+  <data name="Settings_WiFiDirectReset_Status_Complete_Format" xml:space="preserve">
+    <value>清理完成：找到 {0} 个已配对设备，已清除 {1} 个，失败 {2} 个。</value>
+  </data>
+  <data name="Settings_WiFiDirectReset_RestartFailed_Title" xml:space="preserve">
+    <value>需要手动重新启动</value>
+  </data>
+  <data name="Settings_WiFiDirectReset_RestartFailed_Content_Format" xml:space="preserve">
+    <value>Wi-Fi 直连清理已完成，但 WDCable 无法自动重新启动（{0}）。找到已配对设备：{1}；已清除：{2}；失败：{3}。请手动重新启动 WDCable。</value>
+  </data>
+
+  <!-- Wi-Fi Direct Adapter Removal Section -->
+  <data name="Settings_WiFiDirectAdapterRemoval_Title.Text" xml:space="preserve">
+    <value>删除过期的 Wi-Fi 直连适配器</value>
+  </data>
+  <data name="Settings_WiFiDirectAdapterRemoval_Description.Text" xml:space="preserve">
+    <value>仅删除开发过程中遗留的、当前不存在且明确带编号的 Microsoft Wi-Fi Direct Virtual Adapter 条目。</value>
+  </data>
+  <data name="Settings_WiFiDirectAdapterRemoval_Warning.Message" xml:space="preserve">
+    <value>需要管理员权限。当前活动或已断开但仍可用的 Wi-Fi 直连适配器会被保留。</value>
+  </data>
+  <data name="Settings_WiFiDirectAdapterRemoval_Button.Content" xml:space="preserve">
+    <value>删除过期适配器并重新启动</value>
+  </data>
+  <data name="Settings_WiFiDirectAdapterRemoval_Status.Text" xml:space="preserve">
+    <value>Wi-Fi 直连适配器删除状态</value>
+  </data>
+  <data name="Settings_WiFiDirectAdapterRemoval_Confirm_Title" xml:space="preserve">
+    <value>删除过期的 Wi-Fi 直连适配器？</value>
+  </data>
+  <data name="Settings_WiFiDirectAdapterRemoval_Confirm_Content" xml:space="preserve">
+    <value>WDCable 将关闭并请求管理员权限。仅删除当前不存在且明确带编号的 Microsoft Wi-Fi Direct Virtual Adapter 条目。当前活动或已断开但仍可用的适配器会被保留，然后 WDCable 将重新启动。</value>
+  </data>
+  <data name="Settings_WiFiDirectAdapterRemoval_Confirm_Primary" xml:space="preserve">
+    <value>删除过期适配器</value>
+  </data>
+  <data name="Settings_WiFiDirectAdapterRemoval_Status_RequestingElevation" xml:space="preserve">
+    <value>正在请求管理员权限...</value>
+  </data>
+  <data name="Settings_WiFiDirectAdapterRemoval_Status_Closing" xml:space="preserve">
+    <value>正在关闭 WDCable。提升权限的工具将删除过期的带编号适配器并重新启动应用。</value>
+  </data>
+  <data name="Settings_WiFiDirectAdapterRemoval_Error_Title" xml:space="preserve">
+    <value>无法启动适配器删除</value>
+  </data>
+  <data name="Settings_WiFiDirectAdapterRemoval_Error_NoExecutable" xml:space="preserve">
+    <value>WDCable 无法确定其可执行文件路径。</value>
+  </data>
+  <data name="Settings_WiFiDirectAdapterRemoval_Error_ElevationCanceled" xml:space="preserve">
+    <value>管理员权限请求已取消。没有删除任何适配器。</value>
+  </data>
+  <data name="Settings_WiFiDirectAdapterRemoval_Error_LaunchFailed_Format" xml:space="preserve">
+    <value>无法启动适配器清理：{0}</value>
+  </data>
+
   <!-- FileTransfer Page Additional -->
   <data name="FileTransfer_Browse_Button.Content" xml:space="preserve">
     <value>浏览</value>
@@ -476,5 +558,8 @@
   </data>
   <data name="Common_OK" xml:space="preserve">
     <value>确定</value>
+  </data>
+  <data name="Common_Cancel" xml:space="preserve">
+    <value>取消</value>
   </data>
 </root>

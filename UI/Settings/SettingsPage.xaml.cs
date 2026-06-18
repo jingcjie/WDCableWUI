@@ -10,6 +10,7 @@ using Windows.System;
 using Windows.ApplicationModel;
 using Windows.ApplicationModel.Resources;
 using WDCableWUI.Services;
+using Microsoft.Windows.AppLifecycle;
 
 namespace WDCableWUI.UI.Settings
 {
@@ -17,6 +18,8 @@ namespace WDCableWUI.UI.Settings
     {
         private DataManager? _dataManager;
         private bool _isInitializing = true;
+        private bool _wifiDirectResetInProgress;
+        private bool _wifiDirectAdapterRemovalInProgress;
 
         public SettingsPage()
         {
@@ -56,21 +59,21 @@ namespace WDCableWUI.UI.Settings
 
         private static string GetVersionFormat()
         {
+            return GetLocalizedString("Settings_About_Version_Format", "Version {0}");
+        }
+
+        private static string GetLocalizedString(string key, string fallback)
+        {
             try
             {
-                var resourceLoader = ResourceLoader.GetForCurrentView();
-                var format = resourceLoader.GetString("Settings_About_Version_Format");
-                if (!string.IsNullOrWhiteSpace(format))
-                {
-                    return format;
-                }
+                var value = ResourceLoader.GetForCurrentView().GetString(key);
+                return string.IsNullOrWhiteSpace(value) ? fallback : value;
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"Failed to load version format resource: {ex.Message}");
+                Debug.WriteLine($"Failed to load resource '{key}': {ex.Message}");
+                return fallback;
             }
-
-            return "Version {0}";
         }
 
         private static string GetCurrentAppVersion()
@@ -360,6 +363,238 @@ namespace WDCableWUI.UI.Settings
             {
                 System.Diagnostics.Debug.WriteLine($"Error opening Android repository: {ex.Message}");
             }
+        }
+
+        private async void ResetWiFiDirectButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_wifiDirectResetInProgress)
+            {
+                return;
+            }
+
+            var confirmationDialog = new ContentDialog
+            {
+                Title = GetLocalizedString(
+                    "Settings_WiFiDirectReset_Confirm_Title",
+                    "Reset Wi-Fi Direct?"),
+                Content = GetLocalizedString(
+                    "Settings_WiFiDirectReset_Confirm_Content",
+                    "WDCable will disconnect, stop Wi-Fi Direct, and forget every paired Wi-Fi Direct device. This can include Miracast displays, printers, and devices paired by other apps. Saved Wi-Fi networks will not be changed. The app will then restart."),
+                PrimaryButtonText = GetLocalizedString(
+                    "Settings_WiFiDirectReset_Confirm_Primary",
+                    "Reset and restart"),
+                SecondaryButtonText = GetLocalizedString(
+                    "Common_Cancel",
+                    "Cancel"),
+                DefaultButton = ContentDialogButton.Secondary,
+                XamlRoot = XamlRoot
+            };
+
+            if (await confirmationDialog.ShowAsync() != ContentDialogResult.Primary)
+            {
+                return;
+            }
+
+            _wifiDirectResetInProgress = true;
+            ResetWiFiDirectButton.IsEnabled = false;
+            ResetWiFiDirectProgressRing.IsActive = true;
+            ResetWiFiDirectProgressRing.Visibility = Visibility.Visible;
+            ResetWiFiDirectStatusText.Text = GetLocalizedString(
+                "Settings_WiFiDirectReset_Status_Running",
+                "Disconnecting and cleaning Wi-Fi Direct pairings...");
+            ResetWiFiDirectStatusText.Visibility = Visibility.Visible;
+
+            WiFiDirectCleanupResult cleanupResult;
+            try
+            {
+                cleanupResult = await ServiceManager.ResetWiFiDirectAsync();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Wi-Fi Direct reset failed unexpectedly: {ex}");
+                cleanupResult = new WiFiDirectCleanupResult(0, 0, 0, EnumerationFailed: true);
+
+                try
+                {
+                    await ServiceManager.ShutdownAsync("wifi_direct_reset_failed");
+                }
+                catch (Exception shutdownEx)
+                {
+                    Debug.WriteLine($"Fallback shutdown after Wi-Fi Direct reset failed: {shutdownEx}");
+                }
+            }
+
+            ResetWiFiDirectStatusText.Text = string.Format(
+                System.Globalization.CultureInfo.CurrentCulture,
+                GetLocalizedString(
+                    "Settings_WiFiDirectReset_Status_Complete_Format",
+                    "Cleanup complete: {0} paired devices found, {1} removed, {2} failed."),
+                cleanupResult.DiscoveredCount,
+                cleanupResult.UnpairedCount,
+                cleanupResult.FailedPeerCount);
+
+            try
+            {
+                var failureReason = Microsoft.Windows.AppLifecycle.AppInstance.Restart("");
+                await ShowManualRestartDialogAsync(failureReason.ToString(), cleanupResult);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Restart after Wi-Fi Direct reset failed: {ex}");
+                await ShowManualRestartDialogAsync(ex.Message, cleanupResult);
+            }
+
+            App.MainWindow?.Close();
+        }
+
+        private async System.Threading.Tasks.Task ShowManualRestartDialogAsync(
+            string failureReason,
+            WiFiDirectCleanupResult cleanupResult)
+        {
+            var summary = string.Format(
+                System.Globalization.CultureInfo.CurrentCulture,
+                GetLocalizedString(
+                    "Settings_WiFiDirectReset_RestartFailed_Content_Format",
+                    "Wi-Fi Direct cleanup completed, but WDCable could not restart automatically ({0}). Paired devices found: {1}; removed: {2}; failed: {3}. Please start WDCable again manually."),
+                failureReason,
+                cleanupResult.DiscoveredCount,
+                cleanupResult.UnpairedCount,
+                cleanupResult.FailedPeerCount);
+
+            var dialog = new ContentDialog
+            {
+                Title = GetLocalizedString(
+                    "Settings_WiFiDirectReset_RestartFailed_Title",
+                    "Manual restart required"),
+                Content = summary,
+                CloseButtonText = GetLocalizedString("Common_OK", "OK"),
+                XamlRoot = XamlRoot
+            };
+            await dialog.ShowAsync();
+        }
+
+        private async void RemoveWiFiDirectAdaptersButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_wifiDirectAdapterRemovalInProgress)
+            {
+                return;
+            }
+
+            var confirmationDialog = new ContentDialog
+            {
+                Title = GetLocalizedString(
+                    "Settings_WiFiDirectAdapterRemoval_Confirm_Title",
+                    "Remove stale Wi-Fi Direct adapters?"),
+                Content = GetLocalizedString(
+                    "Settings_WiFiDirectAdapterRemoval_Confirm_Content",
+                    "WDCable will close and request administrator permission. Only non-present, explicitly numbered Microsoft Wi-Fi Direct Virtual Adapter entries will be removed. Active and disconnected operational adapters will be preserved, then WDCable will restart."),
+                PrimaryButtonText = GetLocalizedString(
+                    "Settings_WiFiDirectAdapterRemoval_Confirm_Primary",
+                    "Remove stale adapters"),
+                SecondaryButtonText = GetLocalizedString(
+                    "Common_Cancel",
+                    "Cancel"),
+                DefaultButton = ContentDialogButton.Secondary,
+                XamlRoot = XamlRoot
+            };
+
+            if (await confirmationDialog.ShowAsync() != ContentDialogResult.Primary)
+            {
+                return;
+            }
+
+            _wifiDirectAdapterRemovalInProgress = true;
+            RemoveWiFiDirectAdaptersButton.IsEnabled = false;
+            RemoveWiFiDirectAdaptersProgressRing.IsActive = true;
+            RemoveWiFiDirectAdaptersProgressRing.Visibility = Visibility.Visible;
+            RemoveWiFiDirectAdaptersStatusText.Text = GetLocalizedString(
+                "Settings_WiFiDirectAdapterRemoval_Status_RequestingElevation",
+                "Requesting administrator permission...");
+            RemoveWiFiDirectAdaptersStatusText.Visibility = Visibility.Visible;
+
+            var executablePath = Environment.ProcessPath;
+            if (string.IsNullOrWhiteSpace(executablePath))
+            {
+                executablePath = Process.GetCurrentProcess().MainModule?.FileName;
+            }
+
+            if (string.IsNullOrWhiteSpace(executablePath))
+            {
+                await ShowAdapterRemovalErrorAsync(
+                    GetLocalizedString(
+                        "Settings_WiFiDirectAdapterRemoval_Error_NoExecutable",
+                        "WDCable could not determine its executable path."));
+                ResetAdapterRemovalUi();
+                return;
+            }
+
+            string? appUserModelId = null;
+            try
+            {
+                appUserModelId = $"{Package.Current.Id.FamilyName}!App";
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Package identity is unavailable for adapter-cleanup restart: {ex.Message}");
+            }
+
+            var launchResult = WiFiDirectAdapterRemovalLauncher.Launch(
+                Environment.ProcessId,
+                executablePath,
+                appUserModelId);
+            if (!launchResult.Started)
+            {
+                var message = launchResult.ElevationCanceled
+                    ? GetLocalizedString(
+                        "Settings_WiFiDirectAdapterRemoval_Error_ElevationCanceled",
+                        "Administrator permission was canceled. No adapters were removed.")
+                    : string.Format(
+                        System.Globalization.CultureInfo.CurrentCulture,
+                        GetLocalizedString(
+                            "Settings_WiFiDirectAdapterRemoval_Error_LaunchFailed_Format",
+                            "Could not start adapter cleanup: {0}"),
+                        launchResult.ErrorMessage ?? "Unknown error");
+                await ShowAdapterRemovalErrorAsync(message);
+                ResetAdapterRemovalUi();
+                return;
+            }
+
+            RemoveWiFiDirectAdaptersStatusText.Text = GetLocalizedString(
+                "Settings_WiFiDirectAdapterRemoval_Status_Closing",
+                "Closing WDCable. The elevated tool will remove stale numbered adapters and restart the app.");
+
+            try
+            {
+                await ServiceManager.ShutdownAsync("wifi_direct_adapter_removal");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Shutdown before Wi-Fi Direct adapter removal failed: {ex}");
+            }
+
+            App.MainWindow?.Close();
+        }
+
+        private async System.Threading.Tasks.Task ShowAdapterRemovalErrorAsync(string message)
+        {
+            var dialog = new ContentDialog
+            {
+                Title = GetLocalizedString(
+                    "Settings_WiFiDirectAdapterRemoval_Error_Title",
+                    "Adapter removal could not start"),
+                Content = message,
+                CloseButtonText = GetLocalizedString("Common_OK", "OK"),
+                XamlRoot = XamlRoot
+            };
+            await dialog.ShowAsync();
+        }
+
+        private void ResetAdapterRemovalUi()
+        {
+            _wifiDirectAdapterRemovalInProgress = false;
+            RemoveWiFiDirectAdaptersButton.IsEnabled = true;
+            RemoveWiFiDirectAdaptersProgressRing.IsActive = false;
+            RemoveWiFiDirectAdaptersProgressRing.Visibility = Visibility.Collapsed;
         }
 
     }

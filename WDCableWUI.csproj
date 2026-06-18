@@ -11,6 +11,7 @@
     <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' and '$(Platform)' == 'ARM64'">win-arm64</RuntimeIdentifier>
     <UseWinUI>true</UseWinUI>
     <EnableMsixTooling>true</EnableMsixTooling>
+    <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
     <!-- Keep direct/unpackaged debug launches from failing before WinUI activation. -->
     <WindowsAppSdkBootstrapInitialize>true</WindowsAppSdkBootstrapInitialize>
     <WindowsAppSDKBootstrapAutoInitializeOptions_OnPackageIdentity_NOOP>true</WindowsAppSDKBootstrapAutoInitializeOptions_OnPackageIdentity_NOOP>

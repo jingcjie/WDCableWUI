@@ -245,6 +245,25 @@ namespace WDCableWUI.Services
                 reason: reason);
         }
 
+        public async Task StopInfrastructureAsync(string reason)
+        {
+            ThrowIfDisposed();
+
+            var opId = NextOperationId();
+            await StopWatcherAsync(
+                clearDevices: true,
+                reason: reason,
+                opId: opId).ConfigureAwait(false);
+            CleanupAdvertisingResources(opId, reason);
+            RefreshOperationalState(opId, reason, force: true);
+            OnStatusChanged(
+                "WiFi Direct scanning and advertising stopped",
+                opId,
+                api: "WiFiDirectService.StopInfrastructureAsync",
+                result: "stopped",
+                reason: reason);
+        }
+
         public Task<bool> StartScanningAsync()
         {
             return StartScanAsync("legacy_start_scan");
@@ -558,7 +577,36 @@ namespace WDCableWUI.Services
 
             var opId = NextOperationId();
             CleanupAdvertisingResources(opId, "service_dispose");
-            _ = StopWatcherAsync(clearDevices: true, reason: "service_dispose", opId: opId);
+
+            var watcher = _deviceWatcher;
+            if (watcher != null)
+            {
+                try
+                {
+                    if (watcher.Status is DeviceWatcherStatus.Started or DeviceWatcherStatus.EnumerationCompleted)
+                    {
+                        watcher.Stop();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    LogDiagnostic(
+                        opId,
+                        "DeviceWatcher.Stop",
+                        string.Empty,
+                        ex.GetType().Name,
+                        "service_dispose",
+                        message: ex.Message);
+                }
+                finally
+                {
+                    DetachWatcher(watcher);
+                    _deviceWatcher = null;
+                    _watcherStoppedCompletionSource = null;
+                    IsScanning = false;
+                    ClearDiscoveredDevices();
+                }
+            }
 
             if (_wifiDirectDevice != null)
             {
