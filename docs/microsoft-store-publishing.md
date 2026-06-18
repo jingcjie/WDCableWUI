@@ -47,9 +47,10 @@ Update `Package.appxmanifest`:
 Version="<MSIX_VERSION>"
 ```
 
-Run tests before packaging:
+Clean and run tests before packaging:
 
 ```powershell
+dotnet clean WDCableWUI.sln -c Release
 dotnet test WDCableWUI.Tests\WDCableWUI.Tests.csproj -c Release
 ```
 
@@ -90,6 +91,28 @@ Before uploading, inspect the generated x64 app MSIX and confirm:
 - Publisher is `CN=79F5182C-F623-427B-BB35-112212334FEE`.
 - Architecture is x64.
 
+Quick manifest verification from the actual MSIX:
+
+```powershell
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+$zip = [System.IO.Compression.ZipFile]::OpenRead($x64Package.FullName)
+try {
+  $entry = $zip.GetEntry("AppxManifest.xml")
+  $reader = [System.IO.StreamReader]::new($entry.Open())
+  try { [xml]$manifest = $reader.ReadToEnd() } finally { $reader.Dispose() }
+} finally { $zip.Dispose() }
+
+$identity = $manifest.Package.Identity
+[pscustomobject]@{
+  Package = $x64Package.FullName
+  SHA256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $x64Package.FullName).Hash
+  Name = [string]$identity.Name
+  Publisher = [string]$identity.Publisher
+  Version = [string]$identity.Version
+  ProcessorArchitecture = [string]$identity.ProcessorArchitecture
+} | Format-List
+```
+
 ARM64 is optional. Only build and upload it when intentionally expanding Store package coverage:
 
 ```powershell
@@ -100,15 +123,77 @@ For Partner Center, Microsoft recommends uploading an app package upload file (`
 
 ## 5. Upload package draft
 
-Use Partner Center for package upload:
+Fast x64-only CLI path:
+
+```powershell
+$UploadDir = Join-Path $Stage "upload-x64-only"
+New-Item -ItemType Directory -Force -Path $UploadDir | Out-Null
+Get-ChildItem -LiteralPath $UploadDir -Force -ErrorAction SilentlyContinue | Remove-Item -Force
+Copy-Item -LiteralPath $x64Package.FullName -Destination $UploadDir
+
+$uploadPackage = Join-Path $UploadDir (Split-Path -Leaf $x64Package.FullName)
+msstore publish "$uploadPackage" --appId 9MZQMRHFFJJW --noCommit --verbose
+```
+
+Important: pass the `.msix` file itself as the positional `pathOrUrl` argument. Do not pass the repo root with `--inputDirectory` for this loose-MSIX upload.
+
+The verbose log must show:
+
+- `This seems to be a MSIX project.`
+- `Trying to publish these 1 files: '<path>\WDCableWUI_<MSIX_VERSION>_x64.msix'`
+- `Copying '<path>\WDCableWUI_<MSIX_VERSION>_x64.msix' to zip bundle folder.`
+- `Successfully uploaded the application package.`
+- `Skipping submission commit.`
+
+If the log says `Trying to publish these 0 files`, stop. Delete that draft if it was created for the current release, then rerun the command with the `.msix` file path as shown above:
+
+```powershell
+msstore submission delete 9MZQMRHFFJJW --no-confirm
+msstore publish "$uploadPackage" --appId 9MZQMRHFFJJW --noCommit --verbose
+```
+
+After the draft upload, verify the draft package state before committing. Do not paste raw `msstore submission get` output into logs or commits because it can include a temporary `FileUploadUrl`.
+
+Expected package state for a normal replacement:
+
+- Old package: `FileStatus` is `PendingDelete`.
+- New package: `FileName` is `WDCableWUI_<MSIX_VERSION>_x64.msix`.
+- New package: `FileStatus` is `PendingUpload`.
+
+PowerShell package-only summary:
+
+```powershell
+$out = & msstore submission get 9MZQMRHFFJJW 2>$null
+$text = [string]::Join("`n", [string[]]$out)
+$id = [regex]::Match($text, '"Id"\s*:\s*"(?<v>[^"]+)"').Groups["v"].Value
+$status = [regex]::Match($text, '"Status"\s*:\s*"(?<v>[^"]+)"').Groups["v"].Value
+$pkgBlock = [regex]::Match(
+  $text,
+  '"ApplicationPackages"\s*:\s*\[(?<v>.*?)\]\s*,\s*"PackageDeliveryOptions"',
+  [System.Text.RegularExpressions.RegexOptions]::Singleline)
+
+Write-Host "SubmissionId: $id"
+Write-Host "Status: $status"
+foreach ($match in [regex]::Matches($pkgBlock.Groups["v"].Value, '\{(?<obj>.*?)\}', [System.Text.RegularExpressions.RegexOptions]::Singleline)) {
+  $obj = $match.Groups["obj"].Value
+  [pscustomobject]@{
+    FileName = [regex]::Match($obj, '"FileName"\s*:\s*"(?<v>[^"]+)"').Groups["v"].Value
+    FileStatus = [regex]::Match($obj, '"FileStatus"\s*:\s*"(?<v>[^"]+)"').Groups["v"].Value
+    Version = [regex]::Match($obj, '"Version"\s*:\s*"(?<v>[^"]+)"').Groups["v"].Value
+    Architecture = [regex]::Match($obj, '"Architecture"\s*:\s*"(?<v>[^"]+)"').Groups["v"].Value
+  } | Format-List
+}
+```
+
+Do not rely on `msstore publish . --inputDirectory <folder>`. In this repo, that uses the WinUI project publisher path and can create a draft while logging `Trying to publish these 0 files`, leaving the package table unchanged. The correct loose-MSIX publisher path is `msstore publish "<verified .msix path>" --appId 9MZQMRHFFJJW --noCommit`.
+
+Manual Partner Center fallback:
 
 1. Open Partner Center for product `9MZQMRHFFJJW`.
 2. Start or open a package update submission.
 3. On the Packages page, upload the generated x64 app MSIX: `$x64Package.FullName`.
 4. Wait for package validation.
 5. Confirm the Partner Center package table shows the new `$Version`, expected file name ending in `_x64.msix`, and architecture `x64` before submitting.
-
-Do not rely on `msstore publish --inputDirectory` with a manually created `.msixbundle`. The Store Developer CLI publish option documents `.msix` / `.msixupload` inputs, and in this repo it accepted the command while leaving the published package unchanged.
 
 After the manual package upload, fetch the draft metadata if you need to update listing text:
 
@@ -147,11 +232,13 @@ msstore submission publish 9MZQMRHFFJJW
 msstore submission status 9MZQMRHFFJJW
 ```
 
-The final Store availability depends on Microsoft certification.
+`CommitStarted` means Partner Center accepted the commit and is processing ingestion/certification asynchronously. The final Store availability depends on Microsoft certification.
 
 ## 8. Troubleshooting
 
 - If Partner Center rejects the package, confirm the manifest version is higher than the last published version.
 - If `msstore submission get` fails immediately after draft creation, wait a minute and retry once.
+- If `msstore publish` times out while retrieving the app and no draft was created, rerun the same command.
+- If a bad draft was created for the current release, delete it with `msstore submission delete 9MZQMRHFFJJW --no-confirm` before retrying.
 - If `msstore` reports a telemetry settings lock, check for running `msstore` processes and rerun the command serially.
 - If metadata update fails, inspect the generated JSON for malformed listing fields, missing localized listings, or keyword word-count violations.
