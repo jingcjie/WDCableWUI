@@ -51,6 +51,7 @@
     <rescap:Capability Name="runFullTrust" />
     <Capability Name="privateNetworkClientServer" />
     <Capability Name="internetClient" />
+    <DeviceCapability Name="proximity" />
     <DeviceCapability Name="wiFiControl" />
     <DeviceCapability Name="radios" />
   </Capabilities>

@@ -63,7 +63,8 @@ namespace WDCableWUI.UI.Connection
                     // Bind device list to ListView
                     DeviceListView.ItemsSource = _wifiDirectService.DiscoveredDevices;
                     DeviceListView.IsEnabled = true;
-                    DiscoverableToggle.IsEnabled = true;
+                    RetryDiscoverableButton.IsEnabled = true;
+                    UpdateDiscoverabilityStatus();
                     LastStatusText.Text = "WiFi Direct service ready";
                     _isInitialized = true;
                 }
@@ -93,7 +94,6 @@ namespace WDCableWUI.UI.Connection
             _wifiDirectService.DeviceDisconnected += OnDeviceDisconnected;
             _wifiDirectService.StatusChanged += OnStatusChanged;
             _wifiDirectService.ErrorOccurred += OnErrorOccurred;
-            _wifiDirectService.ConnectionRequested += OnConnectionRequested;
             _subscribedWiFiDirectService = _wifiDirectService;
         }
 
@@ -109,7 +109,6 @@ namespace WDCableWUI.UI.Connection
             _subscribedWiFiDirectService.DeviceDisconnected -= OnDeviceDisconnected;
             _subscribedWiFiDirectService.StatusChanged -= OnStatusChanged;
             _subscribedWiFiDirectService.ErrorOccurred -= OnErrorOccurred;
-            _subscribedWiFiDirectService.ConnectionRequested -= OnConnectionRequested;
             _subscribedWiFiDirectService = null;
         }
 
@@ -128,40 +127,10 @@ namespace WDCableWUI.UI.Connection
             // Stop scanning when navigating away to save battery
             if (_wifiDirectService?.IsScanning == true)
             {
-                _wifiDirectService.StopScanning();
+                _ = _wifiDirectService.StopScanAsync("connection_page_navigated_from", clearDevices: false);
             }
 
             UnsubscribeFromWiFiDirectEvents();
-        }
-
-        private async void OnDiscoverableToggled(object sender, RoutedEventArgs e)
-        {
-            if (!_isInitialized) return;
-            
-            var toggle = sender as ToggleSwitch;
-            if (toggle == null) return;
-
-            try
-            {
-                if (toggle.IsOn)
-                {
-                    var success = _wifiDirectService != null ? await _wifiDirectService.StartAdvertisingAsync("WDCableWUI Device") : false;
-                    if (!success)
-                    {
-                        toggle.IsOn = false;
-                        ShowError("Failed to make device discoverable");
-                    }
-                }
-                else
-                {
-                    _wifiDirectService?.StopAdvertising();
-                }
-            }
-            catch (Exception ex)
-            {
-                toggle.IsOn = false;
-                ShowError($"Error toggling device visibility: {ex.Message}");
-            }
         }
 
         private async void OnScanButtonClick(object sender, RoutedEventArgs e)
@@ -170,7 +139,7 @@ namespace WDCableWUI.UI.Connection
 
             try
             {
-                var success = _wifiDirectService != null ? await _wifiDirectService.StartScanningAsync() : false;
+                var success = _wifiDirectService != null ? await _wifiDirectService.StartScanAsync("user_scan") : false;
                 if (success)
                 {
                     ScanButton.IsEnabled = false;
@@ -188,13 +157,16 @@ namespace WDCableWUI.UI.Connection
             }
         }
 
-        private void OnStopScanButtonClick(object sender, RoutedEventArgs e)
+        private async void OnStopScanButtonClick(object sender, RoutedEventArgs e)
         {
             if (!_isInitialized) return;
 
             try
             {
-                _wifiDirectService?.StopScanning();
+                if (_wifiDirectService != null)
+                {
+                    await _wifiDirectService.StopScanAsync("user_stop_scan", clearDevices: true);
+                }
                 ScanButton.IsEnabled = true;
                 StopScanButton.IsEnabled = false;
                 
@@ -293,14 +265,8 @@ namespace WDCableWUI.UI.Connection
             _dispatcherQueue.TryEnqueue(() => {
                 UpdateConnectionStatus($"Connected to {device.Name}", GetRoleDiagnostics());
                 DisconnectButton.IsEnabled = true;
-                
-                // Stop scanning when connected
-                if (_wifiDirectService?.IsScanning == true)
-                {
-                    _wifiDirectService?.StopScanning();
-                    ScanButton.IsEnabled = true;
-                    StopScanButton.IsEnabled = false;
-                }
+                ScanButton.IsEnabled = !(_wifiDirectService?.IsScanning ?? false);
+                StopScanButton.IsEnabled = _wifiDirectService?.IsScanning ?? false;
             });
         }
 
@@ -316,6 +282,7 @@ namespace WDCableWUI.UI.Connection
         {
             _dispatcherQueue.TryEnqueue(() => {
                 LastStatusText.Text = status;
+                UpdateDiscoverabilityStatus();
                 if (_wifiDirectService?.IsConnected == true &&
                     (status.Contains("Role") || status.Contains("endpoint") || status.Contains("Connected")))
                 {
@@ -328,22 +295,34 @@ namespace WDCableWUI.UI.Connection
         {
             _dispatcherQueue.TryEnqueue(() => {
                 LastStatusText.Text = error;
+                UpdateDiscoverabilityStatus();
                 ShowError(error);
             });
         }
-        
-        private async void OnConnectionRequested(object? sender, WDCableWUI.Services.ConnectionRequestEventArgs e)
+
+        private async void OnRetryDiscoverableButtonClick(object sender, RoutedEventArgs e)
         {
+            if (!_isInitialized || _wifiDirectService == null)
+            {
+                return;
+            }
+
             try
             {
-                var result = await ShowConnectionRequestDialog(e.RequestingDevice.Name);
-                e.ResponseTask.SetResult(result);
+                RetryDiscoverableButton.IsEnabled = false;
+                var success = await _wifiDirectService.EnsureDiscoverableAsync("user_retry");
+                if (!success)
+                {
+                    ShowError(_wifiDirectService.DiscoverabilityStatus);
+                }
             }
             catch (Exception ex)
             {
-                // If dialog fails, default to decline
-                e.ResponseTask.SetResult(false);
-                ShowError($"Error showing connection request dialog: {ex.Message}");
+                ShowError($"Error retrying discoverability: {ex.Message}");
+            }
+            finally
+            {
+                UpdateDiscoverabilityStatus();
             }
         }
 
@@ -365,7 +344,7 @@ namespace WDCableWUI.UI.Connection
             ScanButton.IsEnabled = !(_wifiDirectService?.IsScanning ?? false);
             StopScanButton.IsEnabled = _wifiDirectService?.IsScanning ?? false;
             DisconnectButton.IsEnabled = _wifiDirectService?.IsConnected ?? false;
-            DiscoverableToggle.IsOn = _wifiDirectService?.IsAdvertising ?? false;
+            UpdateDiscoverabilityStatus();
             
             // Update connection status
             if (_wifiDirectService?.IsConnected == true)
@@ -388,8 +367,8 @@ namespace WDCableWUI.UI.Connection
             _isInitialized = false;
             DeviceListView.ItemsSource = null;
             DeviceListView.IsEnabled = false;
-            DiscoverableToggle.IsOn = false;
-            DiscoverableToggle.IsEnabled = false;
+            DiscoverabilityStatusText.Text = "Discoverable: Unavailable";
+            RetryDiscoverableButton.IsEnabled = false;
             ScanButton.IsEnabled = false;
             StopScanButton.IsEnabled = false;
             DisconnectButton.IsEnabled = false;
@@ -403,36 +382,24 @@ namespace WDCableWUI.UI.Connection
             return _wifiDirectService?.EndpointDiagnostics ?? string.Empty;
         }
 
+        private void UpdateDiscoverabilityStatus()
+        {
+            if (_wifiDirectService == null)
+            {
+                DiscoverabilityStatusText.Text = "Discoverable: Unavailable";
+                RetryDiscoverableButton.IsEnabled = false;
+                return;
+            }
+
+            DiscoverabilityStatusText.Text = _wifiDirectService.DiscoverabilityStatus;
+            RetryDiscoverableButton.IsEnabled = !_wifiDirectService.IsAdvertising;
+        }
+
         private void OnPageUnloaded(object sender, RoutedEventArgs e)
         {
             UnsubscribeFromWiFiDirectEvents();
         }
 
-        private async Task<bool> ShowConnectionRequestDialog(string deviceName)
-        {
-            try
-            {
-                var dialog = new ContentDialog()
-                {
-                    Title = "Connection Request",
-                    Content = $"'{deviceName}' wants to connect to your device.\n\nDo you want to accept this connection?",
-                    PrimaryButtonText = "Accept",
-                    SecondaryButtonText = "Decline",
-                    DefaultButton = ContentDialogButton.Primary,
-                    XamlRoot = this.XamlRoot
-                };
-                
-                var result = await dialog.ShowAsync();
-                return result == ContentDialogResult.Primary;
-            }
-            catch
-            {
-                // Fallback if dialog fails - default to decline for security
-                System.Diagnostics.Debug.WriteLine($"Connection request dialog failed for device: {deviceName}");
-                return false;
-            }
-        }
-        
         private async void ShowError(string message)
         {
             try

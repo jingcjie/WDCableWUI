@@ -61,10 +61,22 @@
                                       Style="{StaticResource CaptionTextBlockStyle}"
                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                       TextWrapping="Wrap"/>
-                            
-                            <ToggleSwitch x:Name="DiscoverableToggle"
-                                         x:Uid="Connection_AcceptInvitation"
-                                         Toggled="OnDiscoverableToggled"/>
+
+                            <Border Background="{ThemeResource SystemFillColorSolidNeutralBackgroundBrush}"
+                                   BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                   BorderThickness="1"
+                                   CornerRadius="4"
+                                   Padding="12">
+                                <StackPanel Spacing="8">
+                                    <TextBlock x:Name="DiscoverabilityStatusText"
+                                              Text="Discoverable: Starting"
+                                              Style="{StaticResource BodyTextBlockStyle}"
+                                              TextWrapping="Wrap"/>
+                                    <Button x:Name="RetryDiscoverableButton"
+                                           x:Uid="Connection_RetryDiscoverableButton"
+                                           Click="OnRetryDiscoverableButtonClick"/>
+                                </StackPanel>
+                            </Border>
                         </StackPanel>
 
                         <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}"/>

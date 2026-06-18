@@ -414,14 +414,8 @@
   <data name="Connection_DisconnectButton.Content" xml:space="preserve">
     <value>Disconnect</value>
   </data>
-  <data name="Connection_AcceptInvitation.Header" xml:space="preserve">
-    <value>Accept Invitation</value>
-  </data>
-  <data name="Connection_AcceptInvitation.OnContent" xml:space="preserve">
-    <value>Accept</value>
-  </data>
-  <data name="Connection_AcceptInvitation.OffContent" xml:space="preserve">
-    <value>Reject</value>
+  <data name="Connection_RetryDiscoverableButton.Content" xml:space="preserve">
+    <value>Retry</value>
   </data>
   
   <!-- Missing FileTransfer strings -->

@@ -28,6 +28,7 @@ namespace WDCableWUI
     {
         private readonly Dictionary<string, Type> _pageTypes;
         private SessionManager? _subscribedSessionManager;
+        private bool _connectionPromptActive;
         
         public MainWindow()
         {
@@ -69,6 +70,7 @@ namespace WDCableWUI
             
             // Subscribe to WiFiDirect/session events
             SubscribeToWiFiDirectEvents();
+            _ = EnsureDiscoverableOnStartupAsync();
         }
         
         private void SetupCustomTitleBar()
@@ -196,6 +198,7 @@ namespace WDCableWUI
                 {
                     wifiDirectService.DeviceConnected += OnWiFiDirectDeviceConnected;
                     wifiDirectService.DeviceDisconnected += OnWiFiDirectDeviceDisconnected;
+                    wifiDirectService.ConnectionRequested += OnWiFiDirectConnectionRequested;
                 }
                 
                 var sessionManager = ServiceManager.SessionManager;
@@ -230,6 +233,31 @@ namespace WDCableWUI
             {
                 UpdateConnectionStatus(false);
             });
+        }
+
+        private async void OnWiFiDirectConnectionRequested(object? sender, ConnectionRequestEventArgs e)
+        {
+            if (_connectionPromptActive)
+            {
+                e.ResponseTask.TrySetResult(false);
+                return;
+            }
+
+            _connectionPromptActive = true;
+            try
+            {
+                var accepted = await ShowConnectionRequestDialog(e.RequestingDevice.Name);
+                e.ResponseTask.TrySetResult(accepted);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Failed to show WiFi Direct connection request dialog: {ex.Message}");
+                e.ResponseTask.TrySetResult(false);
+            }
+            finally
+            {
+                _connectionPromptActive = false;
+            }
         }
         
         public void UpdateConnectionStatus(bool isConnected, string deviceName = "")
@@ -316,6 +344,7 @@ namespace WDCableWUI
                 {
                     wifiDirectService.DeviceConnected -= OnWiFiDirectDeviceConnected;
                     wifiDirectService.DeviceDisconnected -= OnWiFiDirectDeviceDisconnected;
+                    wifiDirectService.ConnectionRequested -= OnWiFiDirectConnectionRequested;
                 }
                 
                 if (_subscribedSessionManager != null)
@@ -375,6 +404,39 @@ namespace WDCableWUI
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"Failed to show dialog: {ex.Message}");
+            }
+        }
+
+        private async Task<bool> ShowConnectionRequestDialog(string deviceName)
+        {
+            var dialog = new ContentDialog()
+            {
+                Title = "Connection Request",
+                Content = $"'{deviceName}' wants to connect to your device.\n\nDo you want to accept this connection?",
+                PrimaryButtonText = "Accept",
+                SecondaryButtonText = "Decline",
+                DefaultButton = ContentDialogButton.Primary,
+                XamlRoot = this.Content.XamlRoot
+            };
+
+            var result = await dialog.ShowAsync();
+            return result == ContentDialogResult.Primary;
+        }
+
+        private async Task EnsureDiscoverableOnStartupAsync()
+        {
+            await Task.Yield();
+
+            var wifiDirectService = ServiceManager.WiFiDirectService;
+            if (!ServiceManager.AreWiFiDirectServicesAvailable || wifiDirectService == null)
+            {
+                return;
+            }
+
+            var started = await wifiDirectService.EnsureDiscoverableAsync("app_startup");
+            if (!started)
+            {
+                DispatcherQueue.TryEnqueue(() => StatusMessage.Text = wifiDirectService.DiscoverabilityStatus);
             }
         }
         

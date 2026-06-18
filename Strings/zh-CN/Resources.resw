@@ -353,6 +353,10 @@
     <value>设置</value>
   </data>
   
+  <data name="Connection_RetryDiscoverableButton.Content" xml:space="preserve">
+    <value>Retry</value>
+  </data>
+
   <!-- Missing FileTransfer strings -->
   <data name="FileTransfer_DragDrop_Description.Text" xml:space="preserve">
     <value>将文件拖拽到此处或点击浏览</value>
@@ -407,15 +411,6 @@
   </data>
   <data name="Connection_DisconnectButton.Content" xml:space="preserve">
     <value>断开连接</value>
-  </data>
-  <data name="Connection_AcceptInvitation.Header" xml:space="preserve">
-    <value>接受邀请</value>
-  </data>
-  <data name="Connection_AcceptInvitation.OnContent" xml:space="preserve">
-    <value>接受</value>
-  </data>
-  <data name="Connection_AcceptInvitation.OffContent" xml:space="preserve">
-    <value>拒绝</value>
   </data>
   
   <!-- Missing FileTransfer strings -->
