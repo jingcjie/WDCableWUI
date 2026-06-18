@@ -129,7 +129,7 @@
     <value>WiFi Direct Cable</value>
   </data>
   <data name="Settings_About_Copyright.Text" xml:space="preserve">
-    <value>© 2025 WiFi Direct Cable. All rights reserved.</value>
+    <value>© 2025-2026 WiFi Direct Cable. All rights reserved.</value>
   </data>
   <data name="Settings_About_Version_Format" xml:space="preserve">
     <value>Version {0}</value>
