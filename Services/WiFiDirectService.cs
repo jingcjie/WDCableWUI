@@ -51,6 +51,9 @@ namespace WDCableWUI.Services
     public class WiFiDirectService : IDisposable
     {
         private const string DefaultDeviceName = "WDCableWUI Device";
+        public const string DeviceBusyRecoveryHint = "The Wi-Fi Direct device might be busy. If Windows Mobile Hotspot is enabled, turn it off and try again.";
+
+        private const string DiscoverabilityBusyStatus = "Discoverable: Failed - device may be busy; turn off Mobile Hotspot if enabled";
         private static readonly TimeSpan IncomingRequestTimeout = TimeSpan.FromSeconds(60);
         private static readonly TimeSpan EndpointReadyTimeout = TimeSpan.FromSeconds(10);
         private static readonly TimeSpan EndpointPollDelay = TimeSpan.FromMilliseconds(250);
@@ -157,9 +160,9 @@ namespace WDCableWUI.Services
                 if (_publisher == null)
                 {
                     SetState(WiFiDirectServiceState.Error, opId, "WiFiDirectAdvertisementPublisher", result: "missing", reason: reason);
-                    SetDiscoverabilityStatus("Discoverable: Failed - WiFi Direct publisher is unavailable", opId, reason);
+                    SetDiscoverabilityStatus(DiscoverabilityBusyStatus, opId, reason);
                     OnErrorOccurred(
-                        "Failed to start advertising: WiFi Direct publisher is unavailable",
+                        AddDeviceBusyRecoveryHint("Failed to start advertising: WiFi Direct publisher is unavailable"),
                         opId,
                         api: "WiFiDirectAdvertisementPublisher.Start",
                         result: "missing",
@@ -188,9 +191,9 @@ namespace WDCableWUI.Services
                 {
                     IsAdvertising = false;
                     SetState(WiFiDirectServiceState.Error, opId, "WiFiDirectAdvertisementPublisher.Start", result: _publisher.Status.ToString(), reason: reason);
-                    SetDiscoverabilityStatus("Discoverable: Failed - Mobile Hotspot may be enabled", opId, reason);
+                    SetDiscoverabilityStatus(DiscoverabilityBusyStatus, opId, reason);
                     OnErrorOccurred(
-                        $"Failed to start advertising: WiFi Direct publisher status is {_publisher.Status}",
+                        AddDeviceBusyRecoveryHint($"Failed to start advertising: WiFi Direct publisher status is {_publisher.Status}"),
                         opId,
                         api: "WiFiDirectAdvertisementPublisher.Start",
                         result: _publisher.Status.ToString(),
@@ -213,9 +216,9 @@ namespace WDCableWUI.Services
             {
                 IsAdvertising = false;
                 SetState(WiFiDirectServiceState.Error, opId, "WiFiDirectAdvertisementPublisher.Start", result: ex.GetType().Name, reason: reason);
-                SetDiscoverabilityStatus("Discoverable: Failed - Mobile Hotspot may be enabled", opId, reason);
+                SetDiscoverabilityStatus(DiscoverabilityBusyStatus, opId, reason);
                 OnErrorOccurred(
-                    $"Failed to start advertising: {ex.Message}",
+                    AddDeviceBusyRecoveryHint($"Failed to start advertising: {ex.Message}"),
                     opId,
                     api: "WiFiDirectAdvertisementPublisher.Start",
                     result: ex.GetType().Name,
@@ -420,7 +423,7 @@ namespace WDCableWUI.Services
                 {
                     RestorePostConnectionAttemptState(opId, "outbound_connect");
                     OnErrorOccurred(
-                        $"Failed to create WiFi Direct device for {device.Name}",
+                        AddDeviceBusyRecoveryHint($"Failed to create WiFi Direct device for {device.Name}"),
                         opId,
                         api: "WiFiDirectDevice.FromIdAsync",
                         result: "null",
@@ -443,7 +446,7 @@ namespace WDCableWUI.Services
                     nativeDevice.Dispose();
                     RestorePostConnectionAttemptState(opId, "outbound_connect");
                     OnErrorOccurred(
-                        $"WiFi Direct endpoint readiness timed out for {device.Name}",
+                        AddDeviceBusyRecoveryHint($"WiFi Direct endpoint readiness timed out for {device.Name}"),
                         opId,
                         api: "WiFiDirectDevice.GetConnectionEndpointPairs",
                         result: "timeout",
@@ -467,7 +470,7 @@ namespace WDCableWUI.Services
             {
                 RestorePostConnectionAttemptState(opId, "outbound_connect");
                 OnErrorOccurred(
-                    $"Connection error: {ex.Message}",
+                    AddDeviceBusyRecoveryHint($"Connection error: {ex.Message}"),
                     opId,
                     api: "WiFiDirectDevice.FromIdAsync",
                     result: ex.GetType().Name,
@@ -920,7 +923,7 @@ namespace WDCableWUI.Services
                 {
                     RestorePostConnectionAttemptState(opId, "incoming_connect");
                     OnErrorOccurred(
-                        $"Failed to create WiFi Direct device for accepted request from {requestingDevice.Name}",
+                        AddDeviceBusyRecoveryHint($"Failed to create WiFi Direct device for accepted request from {requestingDevice.Name}"),
                         opId,
                         api: "WiFiDirectDevice.FromIdAsync",
                         result: "null",
@@ -943,7 +946,7 @@ namespace WDCableWUI.Services
                     nativeDevice.Dispose();
                     RestorePostConnectionAttemptState(opId, "incoming_connect");
                     OnErrorOccurred(
-                        $"WiFi Direct endpoint readiness timed out for accepted request from {requestingDevice.Name}",
+                        AddDeviceBusyRecoveryHint($"WiFi Direct endpoint readiness timed out for accepted request from {requestingDevice.Name}"),
                         opId,
                         api: "WiFiDirectDevice.GetConnectionEndpointPairs",
                         result: "timeout",
@@ -966,7 +969,7 @@ namespace WDCableWUI.Services
             {
                 RestorePostConnectionAttemptState(opId, "incoming_connect");
                 OnErrorOccurred(
-                    $"Error creating WiFi Direct device: {ex.Message}",
+                    AddDeviceBusyRecoveryHint($"Error creating WiFi Direct device: {ex.Message}"),
                     opId,
                     api: "WiFiDirectDevice.FromIdAsync",
                     result: ex.GetType().Name,
@@ -1242,10 +1245,10 @@ namespace WDCableWUI.Services
                         break;
                     case WiFiDirectAdvertisementPublisherStatus.Aborted:
                         IsAdvertising = false;
-                        SetDiscoverabilityStatus("Discoverable: Failed - Mobile Hotspot may be enabled", opId, "publisher_aborted");
+                        SetDiscoverabilityStatus(DiscoverabilityBusyStatus, opId, "publisher_aborted");
                         SetState(WiFiDirectServiceState.Error, opId, "WiFiDirectAdvertisementPublisher.StatusChanged", args.Error.ToString(), "publisher_aborted");
                         OnErrorOccurred(
-                            $"WiFi Direct advertising aborted: {args.Error}",
+                            AddDeviceBusyRecoveryHint($"WiFi Direct advertising aborted: {args.Error}"),
                             opId,
                             api: "WiFiDirectAdvertisementPublisher.StatusChanged",
                             callback: "StatusChanged",
@@ -1539,6 +1542,13 @@ namespace WDCableWUI.Services
         private static string ValueOrNone(string? value)
         {
             return string.IsNullOrWhiteSpace(value) ? "-" : value.Replace(Environment.NewLine, " ");
+        }
+
+        private static string AddDeviceBusyRecoveryHint(string message)
+        {
+            return message.EndsWith(".", StringComparison.Ordinal)
+                ? $"{message} {DeviceBusyRecoveryHint}"
+                : $"{message}. {DeviceBusyRecoveryHint}";
         }
 
         private static bool IsWatcherActive(DeviceWatcher? watcher)

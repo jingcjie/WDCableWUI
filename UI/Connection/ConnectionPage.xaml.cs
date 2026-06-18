@@ -202,7 +202,7 @@ namespace WDCableWUI.UI.Connection
                 if (!success)
                 {
                     device.Status = "Connection failed";
-                    ShowError($"Failed to connect to {device.Name}");
+                    ShowError($"Failed to connect to {device.Name}. {WiFiDirectService.DeviceBusyRecoveryHint}");
                 }
             }
             catch (Exception ex)
