@@ -79,17 +79,13 @@ public sealed class SessionFailedEventArgs : EventArgs
         string message,
         string? sessionId,
         SessionRole? role,
-        bool isPeerProtocolMissing,
-        SessionFailureKind failureKind = SessionFailureKind.Unknown)
+        bool isPeerProtocolMissing)
     {
         Reason = reason;
         Message = message;
         SessionId = sessionId;
         Role = role;
         IsPeerProtocolMissing = isPeerProtocolMissing;
-        FailureKind = failureKind == SessionFailureKind.Unknown && isPeerProtocolMissing
-            ? SessionFailureKind.PeerProtocolMissing
-            : failureKind;
     }
 
     public string Reason { get; }
@@ -101,8 +97,6 @@ public sealed class SessionFailedEventArgs : EventArgs
     public SessionRole? Role { get; }
 
     public bool IsPeerProtocolMissing { get; }
-
-    public SessionFailureKind FailureKind { get; }
 }
 
 public sealed class SessionDisconnectEventArgs : EventArgs
