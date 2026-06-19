@@ -357,7 +357,9 @@ namespace WDCableWUI
         {
             ConnectionStatusIcon.Glyph = "\uE783"; // Warning
             ConnectionStatusIcon.Foreground = (SolidColorBrush)Application.Current.Resources["SystemFillColorCautionBrush"];
-            ConnectionStatusText.Text = "Protocol failed";
+            ConnectionStatusText.Text = e.FailureKind == SessionFailureKind.TransportSetup
+                ? "Session failed"
+                : "Protocol failed";
             DeviceInfo.Text = e.Reason;
             StatusMessage.Text = e.Message;
         }

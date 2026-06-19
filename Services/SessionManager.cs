@@ -525,16 +525,18 @@ public sealed class SessionManager : IDisposable
             }
 
             TransitionTo(SessionPhase.ConnectingTransport, link);
-            foreach (var (channel, port) in ChannelPorts())
-            {
-                setupToken.ThrowIfCancellationRequested();
-                var transport = link.Role == SessionRole.GroupOwner
-                    ? await AcceptChannelAsync(channel, port, expectedGeneration, setupToken).ConfigureAwait(false)
-                    : await ConnectChannelWithRetryAsync(channel, link.RemoteAddress, port, expectedGeneration, setupToken).ConfigureAwait(false);
-
-                openedTransports[channel] = transport;
-                EmitStatus($"{channel.GetProtocolName()} channel opened on port {port}");
-            }
+            var transportCoordinator = new SessionTransportSetupCoordinator(
+                RequireTransportAdapter,
+                () => ResetTransportAdapterForSetupRetry(expectedGeneration),
+                EmitStatus);
+            openedTransports = new Dictionary<ProtocolChannel, ISessionTransport>(
+                await transportCoordinator.OpenWithFallbackAsync(
+                    link.Role,
+                    link.LocalAddress,
+                    link.RemoteAddress,
+                    ChannelPorts(),
+                    () => !IsCurrent(expectedGeneration),
+                    setupToken).ConfigureAwait(false));
 
             var runtime = new SessionRuntime(expectedGeneration, link, openedTransports);
             TransitionTo(SessionPhase.Handshaking, link);
@@ -572,7 +574,13 @@ public sealed class SessionManager : IDisposable
         catch (PeerProtocolMissingException ex)
         {
             CloseTransports(openedTransports.Values);
-            await FailSessionAsync(expectedGeneration, link, "peer_protocol_missing", ex, isPeerProtocolMissing: true).ConfigureAwait(false);
+            await FailSessionAsync(
+                expectedGeneration,
+                link,
+                "peer_protocol_missing",
+                ex,
+                isPeerProtocolMissing: true,
+                failureKind: SessionFailureKind.PeerProtocolMissing).ConfigureAwait(false);
         }
         catch (ProtocolException ex)
         {
@@ -580,25 +588,54 @@ public sealed class SessionManager : IDisposable
             var reason = ex.Error == ProtocolError.UnsupportedVersion
                 ? "unsupported_protocol_version"
                 : "protocol_error";
+            var failureKind = ex.Error == ProtocolError.UnsupportedVersion
+                ? SessionFailureKind.UnsupportedVersion
+                : ex.Error == ProtocolError.MalformedMagic
+                    ? SessionFailureKind.PeerProtocolMissing
+                    : SessionFailureKind.ProtocolError;
             await FailSessionAsync(
                 expectedGeneration,
                 link,
                 reason,
                 ex,
-                isPeerProtocolMissing: ex.Error == ProtocolError.MalformedMagic).ConfigureAwait(false);
+                isPeerProtocolMissing: ex.Error == ProtocolError.MalformedMagic,
+                failureKind: failureKind).ConfigureAwait(false);
+        }
+        catch (SessionTransportSetupException ex)
+        {
+            CloseTransports(openedTransports.Values);
+            await FailSessionAsync(
+                expectedGeneration,
+                link,
+                "transport_setup_failed",
+                ex,
+                isPeerProtocolMissing: false,
+                failureKind: SessionFailureKind.TransportSetup).ConfigureAwait(false);
         }
         catch (OperationCanceledException ex)
         {
             CloseTransports(openedTransports.Values);
             if (IsCurrent(expectedGeneration) && !cancellationToken.IsCancellationRequested)
             {
-                await FailSessionAsync(expectedGeneration, link, "peer_protocol_missing", new PeerProtocolMissingException("Timed out waiting for WDCable transport setup", ex), true).ConfigureAwait(false);
+                await FailSessionAsync(
+                    expectedGeneration,
+                    link,
+                    "transport_setup_failed",
+                    new SessionTransportSetupException("Timed out waiting for WDCable transport setup", ex),
+                    isPeerProtocolMissing: false,
+                    failureKind: SessionFailureKind.TransportSetup).ConfigureAwait(false);
             }
         }
         catch (Exception ex)
         {
             CloseTransports(openedTransports.Values);
-            await FailSessionAsync(expectedGeneration, link, "transport_setup_failed", ex, isPeerProtocolMissing: false).ConfigureAwait(false);
+            await FailSessionAsync(
+                expectedGeneration,
+                link,
+                "transport_setup_failed",
+                ex,
+                isPeerProtocolMissing: false,
+                failureKind: SessionFailureKind.TransportSetup).ConfigureAwait(false);
         }
     }
 
@@ -1023,7 +1060,8 @@ public sealed class SessionManager : IDisposable
         SessionLinkInfo link,
         string reason,
         Exception exception,
-        bool isPeerProtocolMissing)
+        bool isPeerProtocolMissing,
+        SessionFailureKind failureKind = SessionFailureKind.Unknown)
     {
         await _lifecycleLock.WaitAsync().ConfigureAwait(false);
         try
@@ -1047,7 +1085,7 @@ public sealed class SessionManager : IDisposable
             TransitionTo(SessionPhase.Failed, link, reason);
 
             var message = exception.Message;
-            var args = new SessionFailedEventArgs(reason, message, link.SessionId, link.Role, isPeerProtocolMissing);
+            var args = new SessionFailedEventArgs(reason, message, link.SessionId, link.Role, isPeerProtocolMissing, failureKind);
             RaiseEvent(SessionFailed, args);
             if (isPeerProtocolMissing)
             {
@@ -1173,6 +1211,25 @@ public sealed class SessionManager : IDisposable
     private ISessionTransportAdapter RequireTransportAdapter()
     {
         return _transportAdapter ?? throw new ObjectDisposedException(nameof(SessionManager));
+    }
+
+    private void ResetTransportAdapterForSetupRetry(int expectedGeneration)
+    {
+        if (!IsCurrent(expectedGeneration))
+        {
+            return;
+        }
+
+        try
+        {
+            _transportAdapter?.Cancel();
+            _transportAdapter?.Dispose();
+        }
+        catch
+        {
+        }
+
+        _transportAdapter = new TcpSessionTransportAdapter();
     }
 
     private CancellationTokenSource CreateLinkedAudioToken(CancellationToken cancellationToken)
