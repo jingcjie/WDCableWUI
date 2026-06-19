@@ -1,77 +1,120 @@
-# WDCable for Windows
+<div align="center">
+  <img src="figures/icon.png" width="96" alt="WDCable app icon">
 
-![WDCable Demonstration](figures/demonstration.png)
+  <h1>WDCable for Windows</h1>
 
-*Seamlessly transfer files between devices without requiring a router or existing network*
+  <p>
+    <strong>WiFi Direct Cable (WDCable)</strong> connects Windows and Android devices directly
+    for fast file sharing, messaging, speed testing, and audio streaming—without a router,
+    hotspot, or internet connection.
+  </p>
 
+  <a href="https://apps.microsoft.com/store/detail/9MZQMRHFFJJW?cid=DevShareMCLPCS">
+    <img src="https://get.microsoft.com/images/en-us%20dark.svg" alt="Get WDCable from the Microsoft Store" width="200">
+  </a>
 
-**WDCable** is a powerful application that allows you to transfer files, messages, and data between devices using Wi-Fi Direct. This means you don't need a router, hotspot, or any existing network infrastructure. It's designed to be fast, stable, and easy to use.
+  <p>Windows 10 version 1809+ and Windows 11 · x64 and ARM64 · Wi-Fi Direct</p>
+</div>
 
-This repository contains the Windows version of WDCable, built with WinUI 3 for a modern and native user experience.
+<p align="center">
+  <img src="figures/Invitation_incoming.png" width="900" alt="WDCable receiving a connection invitation from an Android device">
+</p>
 
-## 📦 Download
-
-<a href="https://apps.microsoft.com/store/detail/9MZQMRHFFJJW?cid=DevShareMCLPCS">
-  <img src="https://get.microsoft.com/images/en-us%20dark.svg" alt="Get it from Microsoft Store" width="200"/>
-</a>
-
-*Available now on the Microsoft Store for Windows 10 and Windows 11*
-
-## 📸 Screenshots
-
-| Feature | Screenshot |
-| :---: | :---: |
-| **Connection** | ![Connection](figures/Screenshot1.png) |
-| **Chat** | ![Chat](figures/Screenshot2.png) |
-| **Speed Test** | ![Speed Test](figures/Screenshot3.png) |
-| **File Transfer** | ![File Transfer](figures/Screenshot4.png) |
+<p align="center">
+  <em>Receive and accept connection invitations directly from an Android device.</em>
+</p>
 
 ## ✨ Features
 
-*   **Direct Device-to-Device Communication**: Leverages Wi-Fi Direct to create a direct connection between your devices.
-*   **High-Speed Data Transfer**: Enjoy faster transfer speeds compared to traditional methods that rely on a central network.
-*   **File and Message Sharing**: Seamlessly send files and chat messages between connected devices.
-*   **Network Speed Test**: Includes a tool to measure the transfer speed between your devices.
-*   **Modern Windows UI**: Built with the latest WinUI 3 framework for a clean and intuitive interface.
+- **Connect without network infrastructure** — Link nearby devices directly over Wi-Fi Direct, with no router, hotspot, or internet connection required.
+- **Transfer files quickly** — Send files between Windows and Android with drag-and-drop support and a clear transfer history.
+- **Chat across devices** — Exchange messages with a connected device over the same direct connection.
+- **Stream audio with Audio Link** — Send Windows system audio to Android or stream Android microphone audio to Windows using low-latency Opus encoding.
+- **Measure connection performance** — Run a built-in speed test to check the quality and throughput of the direct link.
+- **Use a native Windows experience** — Work in a modern WinUI 3 interface designed for Windows 10 and Windows 11.
+
+## 📸 Screenshots
+
+<table>
+  <tr>
+    <td width="50%" align="center">
+      <img src="figures/Screenshot1.png" alt="WDCable connection page">
+      <br><strong>Connection</strong>
+    </td>
+    <td width="50%" align="center">
+      <img src="figures/Screenshot2.png" alt="WDCable chat page">
+      <br><strong>Chat</strong>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" align="center">
+      <img src="figures/Screenshot3.png" alt="WDCable speed test page">
+      <br><strong>Speed Test</strong>
+    </td>
+    <td width="50%" align="center">
+      <img src="figures/Screenshot4.png" alt="WDCable file transfer page">
+      <br><strong>File Transfer</strong>
+    </td>
+  </tr>
+</table>
+
+### Audio Link
+
+<table>
+  <tr>
+    <td width="68%" align="center" valign="top">
+      <img src="figures/audio.png" alt="WDCable streaming Windows system audio">
+      <br><strong>Windows system-audio streaming</strong>
+    </td>
+    <td width="32%" align="center" valign="top">
+      <img src="figures/android_side_streaming.png" width="260" alt="WDCable Audio Link streaming on Android">
+      <br><strong>Android Audio Link</strong>
+    </td>
+  </tr>
+</table>
+
+## 🔗 How It Works
+
+WDCable uses Wi-Fi Direct to establish a peer-to-peer connection between supported devices. Data travels directly between them instead of passing through a router or the internet.
+
+<p align="center">
+  <img src="figures/demonstration.png" width="760" alt="Diagram showing a direct Wi-Fi connection between two devices without a router">
+</p>
+
+## 💻 Requirements
+
+- Windows 10 version 1809 (build 17763) or later, or Windows 11.
+- An x64 or ARM64 Windows device.
+- A Wi-Fi network adapter and driver that support Wi-Fi Direct.
+- A second compatible Windows or Android device for peer-to-peer communication.
 
 ## 📱 Android Version
 
-An Android version of WDCable is also available, allowing for cross-platform data transfer. You can find it here: [WDCable for Android](https://github.com/jingcjie/WDCable_flutter).
-
-## Audio Link Status
-
-The shared post-Wi-Fi-Direct protocol is documented in `../PROTOCOL.md`. Audio Link v1 is app-contained: one peer starts `Receive`, the other starts `Send`, and Opus audio flows over an optional session-owned `audio` transport negotiated after the base session is `Ready`.
-
-WinUI has an Audio page and Windows audio runtime. Android send captures microphone audio. Windows send captures default system output through WASAPI loopback so Android can act as the Windows speaker. For compatibility with the current Android receiver, Windows still sends `source: "microphone"` in `audio.offer` metadata even though the local source is system audio. Keep raw TCP ownership inside `SessionManager` and transport adapters; feature code should use session APIs and control messages.
-
-WinUI Audio Link work should mirror Android v1:
-
-*   Receiver must explicitly start receive mode before accepting an offer.
-*   The group owner listens on an ephemeral audio port and sends `audio.transport`; the client connects, regardless of which side sends audio.
-*   Audio errors use `audio_*` control error codes and must not fail the base session.
-*   v1 supports one active stream per session, Android microphone input, Windows system-audio input, in-app playback, Opus, mono 48 kHz, 20 ms packets, and 24 kbps target bitrate.
-*   Android sends Opus codec-configuration frames before normal audio packets using `audio.frame` metadata `codecConfig: true`; the Windows decoder path must consume that initialization before playback.
+Use [WDCable for Android](https://github.com/jingcjie/WDCable_flutter) to connect an Android device and transfer files, exchange messages, test connection speed, or use Audio Link across platforms.
 
 ## 🚀 Getting Started
 
-To get started with WDCable for Windows, you can either build the project from the source or download the latest release.
+Install WDCable from the Microsoft Store using the button above, or build it from source.
 
 ### Building from Source
 
-1.  Clone this repository:
-    ```sh
-    git clone https://github.com/jingcjie/WDCableWUI.git
-    ```
-2.  Open `WDCableWUI.sln` in Visual Studio.
-3.  Build and run the project.
+1. Clone this repository:
 
+   ```sh
+   git clone https://github.com/jingcjie/WDCableWUI.git
+   ```
+
+2. Open `WDCableWUI.sln` in Visual Studio.
+3. Select the `x64` or `ARM64` platform.
+4. Build and run the project.
 
 ## 🛠️ Built With
 
-*   [.NET 8](https://dotnet.microsoft.com/)
-*   [Windows App SDK](https://docs.microsoft.com/en-us/windows/apps/windows-app-sdk/)
-*   [WinUI 3](https://docs.microsoft.com/en-us/windows/apps/winui/winui3/)
+- [.NET 8](https://dotnet.microsoft.com/)
+- [Windows App SDK](https://learn.microsoft.com/windows/apps/windows-app-sdk/)
+- [WinUI 3](https://learn.microsoft.com/windows/apps/winui/winui3/)
+- [Opus](https://opus-codec.org/) audio encoding
 
 ## 📄 License
 
-This project is licensed under the terms of the license specified in the `LICENSE` file.
+WDCable is licensed under the terms in the [LICENSE](LICENSE) file.
