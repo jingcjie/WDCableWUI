@@ -8,13 +8,13 @@ public sealed class LibOpusAudioEncoder : IDisposable
     private readonly OpusEncoder _encoder;
     private bool _isDisposed;
 
-    public LibOpusAudioEncoder()
+    public LibOpusAudioEncoder(int bitrateBps = AudioProtocol.BitrateBps)
     {
         _encoder = new OpusEncoder(
             AudioProtocol.SampleRate,
             AudioProtocol.Channels,
             OpusPredefinedValues.OPUS_APPLICATION_AUDIO);
-        _encoder.Ctl(EncoderCTL.OPUS_SET_BITRATE, AudioProtocol.BitrateBps);
+        _encoder.Ctl(EncoderCTL.OPUS_SET_BITRATE, bitrateBps);
         _encoder.Ctl(EncoderCTL.OPUS_SET_VBR, 0);
     }
 

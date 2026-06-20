@@ -88,6 +88,11 @@ namespace WDCableWUI.Services
                 {
                     _localSettings.Values["AudioLatencyMode"] = AudioProtocol.LatencyModeLow;
                 }
+
+                if (!_localSettings.Values.ContainsKey("AudioQualityMode"))
+                {
+                    _localSettings.Values["AudioQualityMode"] = AudioProtocol.QualityStandard;
+                }
             }
             catch (Exception ex)
             {

@@ -22,8 +22,10 @@ public sealed partial class AudioPage : Page
         InitializeComponent();
         _controlsReady = true;
         Unloaded += OnPageUnloaded;
-        UpdateSourceForMode();
+        UpdateControlsForMode();
         SelectLatencyMode(_audioService?.LatencyMode ?? AudioProtocol.LatencyModeLow);
+        SelectQualityMode(_audioService?.QualityMode ?? AudioProtocol.QualityStandard);
+        UpdateEncodingDisplay();
         StateText.Text = StateDisplayName(AudioService.StateIdle);
         StateDetailsText.Text = "Audio Link is idle";
     }
@@ -58,6 +60,8 @@ public sealed partial class AudioPage : Page
             _audioService = ServiceManager.AreWiFiDirectServicesAvailable ? ServiceManager.AudioService : null;
             _sessionManager = ServiceManager.AreWiFiDirectServicesAvailable ? ServiceManager.SessionManager : null;
             SelectLatencyMode(_audioService?.LatencyMode ?? AudioProtocol.LatencyModeLow);
+            SelectQualityMode(_audioService?.QualityMode ?? AudioProtocol.QualityStandard);
+            UpdateEncodingDisplay();
         }
         catch
         {
@@ -137,7 +141,6 @@ public sealed partial class AudioPage : Page
         StartButton.IsEnabled = false;
         try
         {
-            _audioService.SetLatencyMode(SelectedLatencyMode());
             var mode = SelectedMode();
             if (mode == AudioService.ModeReceive)
             {
@@ -145,6 +148,8 @@ public sealed partial class AudioPage : Page
             }
             else
             {
+                _audioService.SetLatencyMode(SelectedLatencyMode());
+                _audioService.SetQualityMode(SelectedQualityMode());
                 await _audioService.StartSendAsync();
             }
         }
@@ -203,7 +208,7 @@ public sealed partial class AudioPage : Page
             return;
         }
 
-        UpdateSourceForMode();
+        UpdateControlsForMode();
         UpdateButtonStates();
     }
 
@@ -214,7 +219,26 @@ public sealed partial class AudioPage : Page
             return;
         }
 
-        _audioService?.SetLatencyMode(SelectedLatencyMode());
+        if (SelectedMode() == AudioService.ModeSend)
+        {
+            _audioService?.SetLatencyMode(SelectedLatencyMode());
+        }
+        UpdateButtonStates();
+    }
+
+    private void QualityComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!_controlsReady)
+        {
+            return;
+        }
+
+        if (SelectedMode() == AudioService.ModeSend)
+        {
+            _audioService?.SetQualityMode(SelectedQualityMode());
+        }
+
+        UpdateEncodingDisplay();
         UpdateButtonStates();
     }
 
@@ -234,6 +258,9 @@ public sealed partial class AudioPage : Page
     {
         DispatcherQueue.TryEnqueue(() =>
         {
+            LatencyText.Text = DisplayLatencyMode(e.LatencyMode);
+            QualityText.Text = DisplayQualityMode(e.QualityMode);
+            ConfiguredBitrateText.Text = FormatBitrate(e.ConfiguredBitrateBps);
             BitrateText.Text = FormatBitrate(e.BitrateBps);
             BufferText.Text = $"{e.BufferLevelMs} ms";
             FramesSentText.Text = e.FramesSent.ToString();
@@ -246,6 +273,7 @@ public sealed partial class AudioPage : Page
             RtcpLossText.Text = FormatFractionLost(e.RtcpFractionLost);
             RtcpJitterText.Text = FormatRtpJitter(e.RtcpJitter == 0 ? e.LocalJitter : e.RtcpJitter);
             RttText.Text = e.LatencyMs >= 0 ? $"{e.LatencyMs} ms" : "-";
+            UpdateEncodingDisplay(e.ConfiguredBitrateBps);
         });
     }
 
@@ -347,11 +375,13 @@ public sealed partial class AudioPage : Page
         StartButton.IsEnabled = peerSupportsAudio && !active;
         StopButton.IsEnabled = active;
         ModeComboBox.IsEnabled = !active;
-        SourceComboBox.IsEnabled = !active && SelectedMode() == AudioService.ModeSend;
-        LatencyComboBox.IsEnabled = !active;
+        var isSendMode = SelectedMode() == AudioService.ModeSend;
+        SourceComboBox.IsEnabled = !active && isSendMode;
+        LatencyComboBox.IsEnabled = !active && isSendMode;
+        QualityComboBox.IsEnabled = !active && isSendMode;
     }
 
-    private void UpdateSourceForMode()
+    private void UpdateControlsForMode()
     {
         if (!_controlsReady)
         {
@@ -359,7 +389,8 @@ public sealed partial class AudioPage : Page
         }
 
         var mode = SelectedMode();
-        if (mode == AudioService.ModeSend)
+        var isSendMode = mode == AudioService.ModeSend;
+        if (isSendMode)
         {
             SourceComboBox.SelectedIndex = 0;
         }
@@ -367,6 +398,11 @@ public sealed partial class AudioPage : Page
         {
             SourceComboBox.SelectedIndex = 1;
         }
+
+        var senderVisibility = isSendMode ? Visibility.Visible : Visibility.Collapsed;
+        LatencyComboBox.Visibility = senderVisibility;
+        QualityComboBox.Visibility = senderVisibility;
+        UpdateEncodingDisplay();
     }
 
     private string SelectedMode()
@@ -383,6 +419,11 @@ public sealed partial class AudioPage : Page
             : AudioProtocol.LatencyModeLow;
     }
 
+    private string SelectedQualityMode()
+    {
+        return AudioProtocol.NormalizeQualityMode((QualityComboBox.SelectedItem as ComboBoxItem)?.Tag?.ToString());
+    }
+
     private void SelectLatencyMode(string latencyMode)
     {
         if (!_controlsReady)
@@ -393,6 +434,35 @@ public sealed partial class AudioPage : Page
         LatencyComboBox.SelectedIndex = AudioProtocol.NormalizeLatencyMode(latencyMode) == AudioProtocol.LatencyModeStable
             ? 1
             : 0;
+    }
+
+    private void SelectQualityMode(string qualityMode)
+    {
+        if (!_controlsReady)
+        {
+            return;
+        }
+
+        QualityComboBox.SelectedIndex = AudioProtocol.NormalizeQualityMode(qualityMode) switch
+        {
+            AudioProtocol.QualityBalanced => 1,
+            AudioProtocol.QualityHigh => 2,
+            AudioProtocol.QualityNearLossless => 3,
+            _ => 0
+        };
+    }
+
+    private void UpdateEncodingDisplay(int? activeConfiguredBitrateBps = null)
+    {
+        if (!_controlsReady)
+        {
+            return;
+        }
+
+        var bitrateBps = SelectedMode() == AudioService.ModeSend
+            ? AudioProtocol.BitrateForQualityMode(SelectedQualityMode())
+            : activeConfiguredBitrateBps.GetValueOrDefault(AudioProtocol.BitrateBps);
+        EncodingOptionItem.Content = $"Opus {FormatBitrate(bitrateBps)}";
     }
 
     private void UpdateStateIcon(string state)
@@ -443,6 +513,24 @@ public sealed partial class AudioPage : Page
         return bitrateBps >= 1000
             ? $"{bitrateBps / 1000.0:F1} kbps"
             : $"{bitrateBps} bps";
+    }
+
+    private static string DisplayLatencyMode(string latencyMode)
+    {
+        return AudioProtocol.NormalizeLatencyMode(latencyMode) == AudioProtocol.LatencyModeStable
+            ? "Stable"
+            : "Low latency";
+    }
+
+    private static string DisplayQualityMode(string qualityMode)
+    {
+        return AudioProtocol.NormalizeQualityMode(qualityMode) switch
+        {
+            AudioProtocol.QualityBalanced => "Balanced 64 kbps",
+            AudioProtocol.QualityHigh => "High 128 kbps",
+            AudioProtocol.QualityNearLossless => "Near lossless 256 kbps",
+            _ => "Standard 32 kbps"
+        };
     }
 
     private static string FormatFractionLost(byte fractionLost)

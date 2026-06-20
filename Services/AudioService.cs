@@ -63,6 +63,8 @@ public sealed class AudioService : IDisposable
     private string _state = StateIdle;
     private string _offerId = "";
     private string _latencyMode;
+    private string _qualityMode;
+    private int _configuredBitrateBps;
     private bool _isSender;
     private bool _peerReady;
     private bool _captureStarted;
@@ -86,6 +88,8 @@ public sealed class AudioService : IDisposable
     {
         _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
         _latencyMode = LoadLatencyMode();
+        _qualityMode = LoadQualityMode();
+        _configuredBitrateBps = AudioProtocol.BitrateForQualityMode(_qualityMode);
         _jitterBuffer = new JitterBuffer(_latencyMode);
         _sessionManager = ServiceManager.SessionManager;
         if (_sessionManager != null)
@@ -120,6 +124,10 @@ public sealed class AudioService : IDisposable
 
     public string LatencyMode => _latencyMode;
 
+    public string QualityMode => _qualityMode;
+
+    public int ConfiguredBitrateBps => _configuredBitrateBps;
+
     public event EventHandler<AudioStateChangedEventArgs>? StateChanged;
     public event EventHandler<AudioStatsEventArgs>? StatsChanged;
     public event EventHandler<AudioErrorEventArgs>? ErrorOccurred;
@@ -143,6 +151,14 @@ public sealed class AudioService : IDisposable
         {
             _jitterBuffer = new JitterBuffer(normalized);
         }
+    }
+
+    public void SetQualityMode(string qualityMode)
+    {
+        var normalized = AudioProtocol.NormalizeQualityMode(qualityMode);
+        _qualityMode = normalized;
+        _configuredBitrateBps = AudioProtocol.BitrateForQualityMode(normalized);
+        SaveQualityMode(normalized);
     }
 
     public async Task StartReceiveAsync(CancellationToken cancellationToken = default)
@@ -189,6 +205,18 @@ public sealed class AudioService : IDisposable
             return;
         }
 
+        var selectedQualityMode = AudioProtocol.NormalizeQualityMode(_qualityMode);
+        var configuredBitrateBps = AudioProtocol.BitrateForQualityMode(selectedQualityMode);
+        var peerSupportsQualitySelection = AudioProtocol.PeerSupportsAudioQualitySelection(sessionInfo.PeerCapabilities);
+        TraceAudio($"Send requested: latency={_latencyMode} quality={selectedQualityMode} configuredBitrateBps={configuredBitrateBps} peerQualitySelect={peerSupportsQualitySelection}");
+        if (AudioProtocol.RequiresQualitySelectionCapability(selectedQualityMode) && !peerSupportsQualitySelection)
+        {
+            const string message = "The connected peer does not support sender audio quality selection.";
+            TraceAudio($"Send rejected: {message} quality={selectedQualityMode}");
+            await EmitLocalStartErrorAsync(AudioProtocol.ErrorRtpUnsupported, message).ConfigureAwait(false);
+            return;
+        }
+
         if (!CanCreateLoopbackCapture(out var captureError))
         {
             await EmitLocalStartErrorAsync(AudioProtocol.ErrorCaptureFailed, captureError).ConfigureAwait(false);
@@ -209,6 +237,8 @@ public sealed class AudioService : IDisposable
             _localSsrc = AudioProtocol.NewSsrc();
             _rtpSequence = unchecked((ushort)Random.Shared.Next(0, ushort.MaxValue + 1));
             _rtpTimestamp = unchecked((uint)Random.Shared.Next());
+            _qualityMode = selectedQualityMode;
+            _configuredBitrateBps = configuredBitrateBps;
             ResetStateLocked(ModeSend, StateOfferSent, streamId, offerId, isSender: true);
         }
 
@@ -221,7 +251,10 @@ public sealed class AudioService : IDisposable
                     offerId,
                     AudioProtocol.SourceSystemAudio,
                     _localSsrc,
-                    sessionInfo.TransportRole),
+                    sessionInfo.TransportRole,
+                    _latencyMode,
+                    selectedQualityMode,
+                    configuredBitrateBps),
                 cancellationToken).ConfigureAwait(false);
             EmitState("System audio offer sent");
         }
@@ -369,6 +402,7 @@ public sealed class AudioService : IDisposable
 
         if (!AudioProtocol.IsCompatibleOffer(offer))
         {
+            TraceAudio($"Offer rejected: latency={offer.LatencyMode} quality={offer.QualityMode} bitrateBps={offer.BitrateBps}");
             await SendAudioErrorAsync(offer.StreamId, AudioProtocol.ErrorRtpUnsupported, "Unsupported RTP/libopus audio offer.").ConfigureAwait(false);
             return;
         }
@@ -380,8 +414,14 @@ public sealed class AudioService : IDisposable
             _offerId = offer.OfferId;
             _isSender = false;
             _peerSsrc = offer.RtpSsrc;
+            _latencyMode = offer.LatencyMode;
+            _qualityMode = offer.QualityMode;
+            _configuredBitrateBps = offer.BitrateBps;
+            _jitterBuffer = new JitterBuffer(offer.LatencyMode);
             _state = StateConnecting;
         }
+        ResetStats();
+        TraceAudio($"Offer accepted config: latency={offer.LatencyMode} quality={offer.QualityMode} configuredBitrateBps={offer.BitrateBps}");
 
         var streamToken = ReplaceStreamCancellation();
         try
@@ -395,7 +435,10 @@ public sealed class AudioService : IDisposable
                     offer.OfferId,
                     _localSsrc,
                     sessionInfo.TransportRole,
-                    receiverProbeRequired: AudioProtocol.ReceiverProbeRequired(sessionInfo.TransportRole))).ConfigureAwait(false);
+                    receiverProbeRequired: AudioProtocol.ReceiverProbeRequired(sessionInfo.TransportRole),
+                    offer.LatencyMode,
+                    offer.QualityMode,
+                    offer.BitrateBps)).ConfigureAwait(false);
 
             if (sessionInfo.TransportRole == SessionTransportRole.Connector)
             {
@@ -434,7 +477,17 @@ public sealed class AudioService : IDisposable
 
         if (!AudioProtocol.IsCompatibleAccept(accept))
         {
+            TraceAudio($"Accept rejected: latency={accept.LatencyMode} quality={accept.QualityMode} bitrateBps={accept.BitrateBps}");
             await FailAudioAsync(AudioProtocol.ErrorRtpUnsupported, "Peer accepted unsupported RTP/libopus audio details.", accept.StreamId).ConfigureAwait(false);
+            return;
+        }
+
+        if (accept.LatencyMode != _latencyMode ||
+            accept.QualityMode != _qualityMode ||
+            accept.BitrateBps != _configuredBitrateBps)
+        {
+            TraceAudio($"Accept changed stream config: offered latency={_latencyMode} quality={_qualityMode} bitrateBps={_configuredBitrateBps}; accepted latency={accept.LatencyMode} quality={accept.QualityMode} bitrateBps={accept.BitrateBps}");
+            await FailAudioAsync(AudioProtocol.ErrorRtpUnsupported, "Peer accepted a different RTP/libopus stream configuration.", accept.StreamId).ConfigureAwait(false);
             return;
         }
 
@@ -444,6 +497,7 @@ public sealed class AudioService : IDisposable
             _peerSsrc = accept.RtpSsrc;
             _state = StateConnecting;
         }
+        TraceAudio($"Accept verified config: latency={accept.LatencyMode} quality={accept.QualityMode} configuredBitrateBps={accept.BitrateBps}");
 
         var streamToken = ReplaceStreamCancellation();
         try
@@ -499,7 +553,7 @@ public sealed class AudioService : IDisposable
             }
         }
 
-        TraceAudio($"UDP audio open: role={sessionInfo.TransportRole.GetEventName()} rtpLocal={rtpClient.Client.LocalEndPoint} rtcpLocal={rtcpClient.Client.LocalEndPoint} rtpDest={_rtpDestination} rtcpDest={_rtcpDestination}");
+        TraceAudio($"UDP audio open: role={sessionInfo.TransportRole.GetEventName()} rtpLocal={rtpClient.Client.LocalEndPoint} rtcpLocal={rtcpClient.Client.LocalEndPoint} rtpDest={_rtpDestination} rtcpDest={_rtcpDestination} latency={_latencyMode} quality={_qualityMode} configuredBitrateBps={_configuredBitrateBps}");
         _ = RunRtpReceiveLoopAsync(rtpClient, cancellationToken);
         _ = RunRtcpReceiveLoopAsync(rtcpClient, cancellationToken);
         await Task.CompletedTask.ConfigureAwait(false);
@@ -750,7 +804,9 @@ public sealed class AudioService : IDisposable
 
         try
         {
-            using var encoder = new LibOpusAudioEncoder();
+            var configuredBitrateBps = _configuredBitrateBps;
+            using var encoder = new LibOpusAudioEncoder(configuredBitrateBps);
+            TraceAudio($"Capture encoder started: quality={_qualityMode} configuredBitrateBps={configuredBitrateBps}");
             var pendingSamples = new List<short>(AudioProtocol.SamplesPerFrame * 4);
             using var capture = new WasapiLoopbackCapture();
             _loopbackCapture = capture;
@@ -1060,6 +1116,8 @@ public sealed class AudioService : IDisposable
                     snapshot.UnderflowCount,
                     rttMs,
                     _latencyMode,
+                    _qualityMode,
+                    _configuredBitrateBps,
                     snapshot.SequenceGaps,
                     snapshot.LatePacketDrops,
                     snapshot.DuplicateOrReorderedPackets,
@@ -1253,6 +1311,9 @@ public sealed class AudioService : IDisposable
         lock (_stateLock)
         {
             ResetStateLocked(ModeIdle, StateIdle, streamId: 0, offerId: "", isSender: false);
+            _latencyMode = LoadLatencyMode();
+            _qualityMode = LoadQualityMode();
+            _configuredBitrateBps = AudioProtocol.BitrateForQualityMode(_qualityMode);
             _peerReady = false;
             _captureStarted = false;
             _playbackStarted = false;
@@ -1381,7 +1442,8 @@ public sealed class AudioService : IDisposable
             _peerReady,
             _state == StateStreaming,
             message,
-            _latencyMode);
+            _latencyMode,
+            _qualityMode);
         RaiseOnDispatcher(() => StateChanged?.Invoke(this, args));
         RaiseOnDispatcher(() => StatusChanged?.Invoke(this, message));
     }
@@ -1435,6 +1497,33 @@ public sealed class AudioService : IDisposable
         }
     }
 
+    private static string LoadQualityMode()
+    {
+        try
+        {
+            var dataManager = ServiceManager.DataManager;
+            return dataManager == null
+                ? AudioProtocol.QualityStandard
+                : AudioProtocol.NormalizeQualityMode(
+                    dataManager.GetSetting("AudioQualityMode", AudioProtocol.QualityStandard));
+        }
+        catch
+        {
+            return AudioProtocol.QualityStandard;
+        }
+    }
+
+    private static void SaveQualityMode(string qualityMode)
+    {
+        try
+        {
+            ServiceManager.DataManager?.SetSetting("AudioQualityMode", qualityMode);
+        }
+        catch
+        {
+        }
+    }
+
     private static void TraceAudio(string message)
     {
         Debug.WriteLine($"Audio Link v2: {message}");
@@ -1454,7 +1543,8 @@ public sealed class AudioStateChangedEventArgs : EventArgs
         bool peerReady,
         bool isStreaming,
         string message,
-        string latencyMode)
+        string latencyMode,
+        string qualityMode)
     {
         Mode = mode;
         State = state;
@@ -1465,6 +1555,7 @@ public sealed class AudioStateChangedEventArgs : EventArgs
         IsStreaming = isStreaming;
         Message = message;
         LatencyMode = latencyMode;
+        QualityMode = qualityMode;
     }
 
     public string Mode { get; }
@@ -1484,6 +1575,8 @@ public sealed class AudioStateChangedEventArgs : EventArgs
     public string Message { get; }
 
     public string LatencyMode { get; }
+
+    public string QualityMode { get; }
 }
 
 public sealed class AudioStatsEventArgs : EventArgs
@@ -1500,6 +1593,8 @@ public sealed class AudioStatsEventArgs : EventArgs
         long underflowCount,
         long latencyMs,
         string latencyMode,
+        string qualityMode,
+        int configuredBitrateBps,
         long packetLossCount,
         long latePacketDrops,
         long duplicateOrReorderedPackets,
@@ -1523,6 +1618,8 @@ public sealed class AudioStatsEventArgs : EventArgs
         UnderflowCount = underflowCount;
         LatencyMs = latencyMs;
         LatencyMode = latencyMode;
+        QualityMode = qualityMode;
+        ConfiguredBitrateBps = configuredBitrateBps;
         PacketLossCount = packetLossCount;
         LatePacketDrops = latePacketDrops;
         DuplicateOrReorderedPackets = duplicateOrReorderedPackets;
@@ -1557,6 +1654,10 @@ public sealed class AudioStatsEventArgs : EventArgs
     public long LatencyMs { get; }
 
     public string LatencyMode { get; }
+
+    public string QualityMode { get; }
+
+    public int ConfiguredBitrateBps { get; }
 
     public long PacketLossCount { get; }
 

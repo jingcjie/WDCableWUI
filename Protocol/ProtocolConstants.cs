@@ -23,6 +23,7 @@ public static class ProtocolConstants
     public const string CapabilityAudioTransportRtp = "audio.transport.rtp";
     public const string CapabilityAudioRtcp = "audio.rtcp";
     public const string CapabilityAudioCodecLibOpus = "audio.codec.libopus";
+    public const string CapabilityAudioQualitySelect = "audio.quality.select";
 
     public static readonly string[] AdvertisedCapabilities =
     [
@@ -34,6 +35,7 @@ public static class ProtocolConstants
         CapabilityAudioCodecOpus,
         CapabilityAudioTransportRtp,
         CapabilityAudioRtcp,
-        CapabilityAudioCodecLibOpus
+        CapabilityAudioCodecLibOpus,
+        CapabilityAudioQualitySelect
     ];
 }

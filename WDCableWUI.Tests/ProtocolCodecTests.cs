@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using WDCableWUI.Protocol;
+using WDCableWUI.Services;
 
 namespace WDCableWUI.Tests;
 
@@ -183,21 +184,26 @@ public sealed class ProtocolCodecTests
     [TestMethod]
     public void WinUIAdvertisesAudioAfterRuntimeIsImplemented()
     {
+        var capabilities = AudioProtocol.AdvertisedCapabilitiesForRuntime();
+
         CollectionAssert.Contains(
-            ProtocolConstants.AdvertisedCapabilities,
+            capabilities.ToList(),
             ProtocolConstants.CapabilityAudioLink);
         CollectionAssert.Contains(
-            ProtocolConstants.AdvertisedCapabilities,
+            capabilities.ToList(),
             ProtocolConstants.CapabilityAudioCodecOpus);
         CollectionAssert.Contains(
-            ProtocolConstants.AdvertisedCapabilities,
+            capabilities.ToList(),
             ProtocolConstants.CapabilityAudioTransportRtp);
         CollectionAssert.Contains(
-            ProtocolConstants.AdvertisedCapabilities,
+            capabilities.ToList(),
             ProtocolConstants.CapabilityAudioRtcp);
         CollectionAssert.Contains(
-            ProtocolConstants.AdvertisedCapabilities,
+            capabilities.ToList(),
             ProtocolConstants.CapabilityAudioCodecLibOpus);
+        CollectionAssert.Contains(
+            capabilities.ToList(),
+            ProtocolConstants.CapabilityAudioQualitySelect);
     }
 
     [TestMethod]

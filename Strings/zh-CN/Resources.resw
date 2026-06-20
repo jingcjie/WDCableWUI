@@ -545,6 +545,21 @@
   <data name="Audio_Latency_Stable.Content" xml:space="preserve">
     <value>Stable</value>
   </data>
+  <data name="Audio_Quality_Header.Header" xml:space="preserve">
+    <value>音质</value>
+  </data>
+  <data name="Audio_Quality_Standard.Content" xml:space="preserve">
+    <value>标准 32 kbps</value>
+  </data>
+  <data name="Audio_Quality_Balanced.Content" xml:space="preserve">
+    <value>均衡 64 kbps</value>
+  </data>
+  <data name="Audio_Quality_High.Content" xml:space="preserve">
+    <value>高 128 kbps</value>
+  </data>
+  <data name="Audio_Quality_NearLossless.Content" xml:space="preserve">
+    <value>近无损 256 kbps</value>
+  </data>
   <data name="Audio_Start_Button.Content" xml:space="preserve">
     <value>Start</value>
   </data>
@@ -556,6 +571,18 @@
   </data>
   <data name="Audio_Stats_Title.Text" xml:space="preserve">
     <value>Live Stats</value>
+  </data>
+  <data name="Audio_Stats_Latency.Text" xml:space="preserve">
+    <value>延迟</value>
+  </data>
+  <data name="Audio_Stats_Quality.Text" xml:space="preserve">
+    <value>音质</value>
+  </data>
+  <data name="Audio_Stats_ConfiguredBitrate.Text" xml:space="preserve">
+    <value>配置码率</value>
+  </data>
+  <data name="Audio_Stats_MeasuredBitrate.Text" xml:space="preserve">
+    <value>实测码率</value>
   </data>
 
   <!-- WiFi Direct availability -->

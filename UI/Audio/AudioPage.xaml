@@ -68,6 +68,7 @@
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
                                 </Grid.RowDefinitions>
 
                                 <ComboBox x:Name="ModeComboBox"
@@ -98,7 +99,7 @@
                                           SelectedIndex="0"
                                           HorizontalAlignment="Stretch"
                                           IsEnabled="False">
-                                    <ComboBoxItem Content="Opus" Tag="opus"/>
+                                    <ComboBoxItem x:Name="EncodingOptionItem" Content="Opus 32 kbps" Tag="opus"/>
                                 </ComboBox>
 
                                 <ComboBox x:Name="LatencyComboBox"
@@ -112,7 +113,21 @@
                                     <ComboBoxItem x:Uid="Audio_Latency_Stable" Tag="stable"/>
                                 </ComboBox>
 
-                                <StackPanel Grid.Row="1" Grid.ColumnSpan="4" Orientation="Horizontal" Spacing="8">
+                                <ComboBox x:Name="QualityComboBox"
+                                          Grid.Row="1"
+                                          Grid.Column="0"
+                                          Grid.ColumnSpan="2"
+                                          x:Uid="Audio_Quality_Header"
+                                          SelectedIndex="0"
+                                          HorizontalAlignment="Stretch"
+                                          SelectionChanged="QualityComboBox_SelectionChanged">
+                                    <ComboBoxItem x:Uid="Audio_Quality_Standard" Tag="standard"/>
+                                    <ComboBoxItem x:Uid="Audio_Quality_Balanced" Tag="balanced"/>
+                                    <ComboBoxItem x:Uid="Audio_Quality_High" Tag="high"/>
+                                    <ComboBoxItem x:Uid="Audio_Quality_NearLossless" Tag="nearLossless"/>
+                                </ComboBox>
+
+                                <StackPanel Grid.Row="2" Grid.ColumnSpan="4" Orientation="Horizontal" Spacing="8">
                                     <Button x:Name="StartButton"
                                             x:Uid="Audio_Start_Button"
                                             Style="{StaticResource AccentButtonStyle}"
@@ -188,43 +203,55 @@
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
 
-                            <TextBlock Grid.Row="0" Text="Bitrate" Style="{StaticResource CaptionTextBlockStyle}"/>
-                            <TextBlock x:Name="BitrateText" Grid.Row="0" Grid.Column="1" Text="0 bps" Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                            <TextBlock Grid.Row="0" x:Uid="Audio_Stats_Latency" Style="{StaticResource CaptionTextBlockStyle}"/>
+                            <TextBlock x:Name="LatencyText" Grid.Row="0" Grid.Column="1" Text="Low latency" Style="{StaticResource BodyStrongTextBlockStyle}"/>
 
-                            <TextBlock Grid.Row="1" Text="Buffer" Style="{StaticResource CaptionTextBlockStyle}"/>
-                            <TextBlock x:Name="BufferText" Grid.Row="1" Grid.Column="1" Text="0 ms" Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                            <TextBlock Grid.Row="1" x:Uid="Audio_Stats_Quality" Style="{StaticResource CaptionTextBlockStyle}"/>
+                            <TextBlock x:Name="QualityText" Grid.Row="1" Grid.Column="1" Text="Standard 32 kbps" Style="{StaticResource BodyStrongTextBlockStyle}"/>
 
-                            <TextBlock Grid.Row="2" Text="Sent" Style="{StaticResource CaptionTextBlockStyle}"/>
-                            <TextBlock x:Name="FramesSentText" Grid.Row="2" Grid.Column="1" Text="0" Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                            <TextBlock Grid.Row="2" x:Uid="Audio_Stats_ConfiguredBitrate" Style="{StaticResource CaptionTextBlockStyle}"/>
+                            <TextBlock x:Name="ConfiguredBitrateText" Grid.Row="2" Grid.Column="1" Text="32.0 kbps" Style="{StaticResource BodyStrongTextBlockStyle}"/>
 
-                            <TextBlock Grid.Row="3" Text="Received" Style="{StaticResource CaptionTextBlockStyle}"/>
-                            <TextBlock x:Name="FramesReceivedText" Grid.Row="3" Grid.Column="1" Text="0" Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                            <TextBlock Grid.Row="3" x:Uid="Audio_Stats_MeasuredBitrate" Style="{StaticResource CaptionTextBlockStyle}"/>
+                            <TextBlock x:Name="BitrateText" Grid.Row="3" Grid.Column="1" Text="0 bps" Style="{StaticResource BodyStrongTextBlockStyle}"/>
 
-                            <TextBlock Grid.Row="4" Text="Dropped" Style="{StaticResource CaptionTextBlockStyle}"/>
-                            <TextBlock x:Name="DroppedText" Grid.Row="4" Grid.Column="1" Text="0" Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                            <TextBlock Grid.Row="4" Text="Buffer" Style="{StaticResource CaptionTextBlockStyle}"/>
+                            <TextBlock x:Name="BufferText" Grid.Row="4" Grid.Column="1" Text="0 ms" Style="{StaticResource BodyStrongTextBlockStyle}"/>
 
-                            <TextBlock Grid.Row="5" Text="Underflows" Style="{StaticResource CaptionTextBlockStyle}"/>
-                            <TextBlock x:Name="UnderflowText" Grid.Row="5" Grid.Column="1" Text="0" Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                            <TextBlock Grid.Row="5" Text="Sent" Style="{StaticResource CaptionTextBlockStyle}"/>
+                            <TextBlock x:Name="FramesSentText" Grid.Row="5" Grid.Column="1" Text="0" Style="{StaticResource BodyStrongTextBlockStyle}"/>
 
-                            <TextBlock Grid.Row="6" Text="Packet loss" Style="{StaticResource CaptionTextBlockStyle}"/>
-                            <TextBlock x:Name="PacketLossText" Grid.Row="6" Grid.Column="1" Text="0" Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                            <TextBlock Grid.Row="6" Text="Received" Style="{StaticResource CaptionTextBlockStyle}"/>
+                            <TextBlock x:Name="FramesReceivedText" Grid.Row="6" Grid.Column="1" Text="0" Style="{StaticResource BodyStrongTextBlockStyle}"/>
 
-                            <TextBlock Grid.Row="7" Text="Late drops" Style="{StaticResource CaptionTextBlockStyle}"/>
-                            <TextBlock x:Name="LateDropsText" Grid.Row="7" Grid.Column="1" Text="0" Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                            <TextBlock Grid.Row="7" Text="Dropped" Style="{StaticResource CaptionTextBlockStyle}"/>
+                            <TextBlock x:Name="DroppedText" Grid.Row="7" Grid.Column="1" Text="0" Style="{StaticResource BodyStrongTextBlockStyle}"/>
 
-                            <TextBlock Grid.Row="8" Text="PLC" Style="{StaticResource CaptionTextBlockStyle}"/>
-                            <TextBlock x:Name="PlcText" Grid.Row="8" Grid.Column="1" Text="0" Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                            <TextBlock Grid.Row="8" Text="Underflows" Style="{StaticResource CaptionTextBlockStyle}"/>
+                            <TextBlock x:Name="UnderflowText" Grid.Row="8" Grid.Column="1" Text="0" Style="{StaticResource BodyStrongTextBlockStyle}"/>
 
-                            <TextBlock Grid.Row="9" Text="RTCP loss" Style="{StaticResource CaptionTextBlockStyle}"/>
-                            <TextBlock x:Name="RtcpLossText" Grid.Row="9" Grid.Column="1" Text="0%" Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                            <TextBlock Grid.Row="9" Text="Packet loss" Style="{StaticResource CaptionTextBlockStyle}"/>
+                            <TextBlock x:Name="PacketLossText" Grid.Row="9" Grid.Column="1" Text="0" Style="{StaticResource BodyStrongTextBlockStyle}"/>
 
-                            <TextBlock Grid.Row="10" Text="RTCP jitter" Style="{StaticResource CaptionTextBlockStyle}"/>
-                            <TextBlock x:Name="RtcpJitterText" Grid.Row="10" Grid.Column="1" Text="0 ms" Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                            <TextBlock Grid.Row="10" Text="Late drops" Style="{StaticResource CaptionTextBlockStyle}"/>
+                            <TextBlock x:Name="LateDropsText" Grid.Row="10" Grid.Column="1" Text="0" Style="{StaticResource BodyStrongTextBlockStyle}"/>
 
-                            <TextBlock Grid.Row="11" Text="RTT" Style="{StaticResource CaptionTextBlockStyle}"/>
-                            <TextBlock x:Name="RttText" Grid.Row="11" Grid.Column="1" Text="-" Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                            <TextBlock Grid.Row="11" Text="PLC" Style="{StaticResource CaptionTextBlockStyle}"/>
+                            <TextBlock x:Name="PlcText" Grid.Row="11" Grid.Column="1" Text="0" Style="{StaticResource BodyStrongTextBlockStyle}"/>
+
+                            <TextBlock Grid.Row="12" Text="RTCP loss" Style="{StaticResource CaptionTextBlockStyle}"/>
+                            <TextBlock x:Name="RtcpLossText" Grid.Row="12" Grid.Column="1" Text="0%" Style="{StaticResource BodyStrongTextBlockStyle}"/>
+
+                            <TextBlock Grid.Row="13" Text="RTCP jitter" Style="{StaticResource CaptionTextBlockStyle}"/>
+                            <TextBlock x:Name="RtcpJitterText" Grid.Row="13" Grid.Column="1" Text="0 ms" Style="{StaticResource BodyStrongTextBlockStyle}"/>
+
+                            <TextBlock Grid.Row="14" Text="RTT" Style="{StaticResource CaptionTextBlockStyle}"/>
+                            <TextBlock x:Name="RttText" Grid.Row="14" Grid.Column="1" Text="-" Style="{StaticResource BodyStrongTextBlockStyle}"/>
                         </Grid>
                     </StackPanel>
                 </Border>

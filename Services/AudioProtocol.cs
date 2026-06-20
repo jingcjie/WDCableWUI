@@ -40,6 +40,16 @@ public static class AudioProtocol
     public const string LatencyModeLow = "lowLatency";
     public const string LatencyModeStable = "stable";
 
+    public const string QualityStandard = "standard";
+    public const string QualityBalanced = "balanced";
+    public const string QualityHigh = "high";
+    public const string QualityNearLossless = "nearLossless";
+
+    public const int BitrateStandardBps = 32_000;
+    public const int BitrateBalancedBps = 64_000;
+    public const int BitrateHighBps = 128_000;
+    public const int BitrateNearLosslessBps = 256_000;
+
     public const int RtpPort = 8990;
     public const int RtcpPort = 8991;
     public const byte RtpPayloadType = 111;
@@ -47,9 +57,18 @@ public static class AudioProtocol
     public const int SampleRate = 48_000;
     public const int Channels = 1;
     public const int FrameDurationMs = 20;
-    public const int BitrateBps = 32_000;
+    public const int BitrateBps = BitrateStandardBps;
     public const int SamplesPerFrame = SampleRate * FrameDurationMs / 1000;
     public const uint RtpTimestampIncrement = SamplesPerFrame;
+
+    public static readonly IReadOnlyDictionary<string, int> QualityBitrates =
+        new Dictionary<string, int>(StringComparer.Ordinal)
+        {
+            [QualityStandard] = BitrateStandardBps,
+            [QualityBalanced] = BitrateBalancedBps,
+            [QualityHigh] = BitrateHighBps,
+            [QualityNearLossless] = BitrateNearLosslessBps
+        };
 
     public static readonly byte[] RtpProbePayload = "WDCABLE-AUDIO-RTP-PROBE"u8.ToArray();
     public static readonly byte[] RtcpProbePayload = "WDCABLE-AUDIO-RTCP-PROBE"u8.ToArray();
@@ -61,6 +80,11 @@ public static class AudioProtocol
                capabilities.Contains(ProtocolConstants.CapabilityAudioTransportRtp) &&
                capabilities.Contains(ProtocolConstants.CapabilityAudioRtcp) &&
                capabilities.Contains(ProtocolConstants.CapabilityAudioCodecLibOpus);
+    }
+
+    public static bool PeerSupportsAudioQualitySelection(IReadOnlyList<string> capabilities)
+    {
+        return capabilities.Contains(ProtocolConstants.CapabilityAudioQualitySelect);
     }
 
     public static IReadOnlyList<string> AdvertisedCapabilitiesForRuntime()
@@ -75,6 +99,7 @@ public static class AudioProtocol
             capabilities.Add(ProtocolConstants.CapabilityAudioTransportRtp);
             capabilities.Add(ProtocolConstants.CapabilityAudioRtcp);
             capabilities.Add(ProtocolConstants.CapabilityAudioCodecLibOpus);
+            capabilities.Add(ProtocolConstants.CapabilityAudioQualitySelect);
         }
 
         return capabilities;
@@ -119,8 +144,13 @@ public static class AudioProtocol
         string offerId,
         string source,
         uint senderSsrc,
-        SessionTransportRole transportRole)
+        SessionTransportRole transportRole,
+        string latencyMode = LatencyModeLow,
+        string qualityMode = QualityStandard,
+        int bitrateBps = BitrateBps)
     {
+        var normalizedLatencyMode = NormalizeLatencyMode(latencyMode);
+        var normalizedQualityMode = NormalizeQualityMode(qualityMode);
         return BuildMetadata(new Dictionary<string, object?>
         {
             ["kind"] = KindOffer,
@@ -133,7 +163,9 @@ public static class AudioProtocol
             ["sampleRate"] = SampleRate,
             ["channels"] = Channels,
             ["frameDurationMs"] = FrameDurationMs,
-            ["bitrateBps"] = BitrateBps,
+            ["latencyMode"] = normalizedLatencyMode,
+            ["qualityMode"] = normalizedQualityMode,
+            ["bitrateBps"] = bitrateBps,
             ["rtpPayloadType"] = RtpPayloadType,
             ["rtpClockRate"] = RtpClockRate,
             ["rtpSsrc"] = senderSsrc,
@@ -146,8 +178,13 @@ public static class AudioProtocol
         string offerId,
         uint receiverSsrc,
         SessionTransportRole transportRole,
-        bool receiverProbeRequired)
+        bool receiverProbeRequired,
+        string latencyMode = LatencyModeLow,
+        string qualityMode = QualityStandard,
+        int bitrateBps = BitrateBps)
     {
+        var normalizedLatencyMode = NormalizeLatencyMode(latencyMode);
+        var normalizedQualityMode = NormalizeQualityMode(qualityMode);
         return BuildMetadata(new Dictionary<string, object?>
         {
             ["kind"] = KindAccept,
@@ -159,7 +196,9 @@ public static class AudioProtocol
             ["sampleRate"] = SampleRate,
             ["channels"] = Channels,
             ["frameDurationMs"] = FrameDurationMs,
-            ["bitrateBps"] = BitrateBps,
+            ["latencyMode"] = normalizedLatencyMode,
+            ["qualityMode"] = normalizedQualityMode,
+            ["bitrateBps"] = bitrateBps,
             ["rtpPayloadType"] = RtpPayloadType,
             ["rtpClockRate"] = RtpClockRate,
             ["rtpSsrc"] = receiverSsrc,
@@ -203,6 +242,7 @@ public static class AudioProtocol
     public static AudioOffer ParseOffer(IReadOnlyDictionary<string, JsonElement> metadata)
     {
         RequireKind(metadata, KindOffer);
+        var bitrateBps = RequiredInt32(metadata, "bitrateBps");
         return new AudioOffer(
             RequiredInt64(metadata, "streamId"),
             RequiredString(metadata, "offerId"),
@@ -213,7 +253,9 @@ public static class AudioProtocol
             RequiredInt32(metadata, "sampleRate"),
             RequiredInt32(metadata, "channels"),
             RequiredInt32(metadata, "frameDurationMs"),
-            RequiredInt32(metadata, "bitrateBps"),
+            OptionalLatencyMode(metadata),
+            OptionalQualityMode(metadata, bitrateBps),
+            bitrateBps,
             RequiredInt32(metadata, "rtpPayloadType"),
             RequiredInt32(metadata, "rtpClockRate"),
             RequiredUInt32(metadata, "rtpSsrc"),
@@ -223,6 +265,7 @@ public static class AudioProtocol
     public static AudioAccept ParseAccept(IReadOnlyDictionary<string, JsonElement> metadata)
     {
         RequireKind(metadata, KindAccept);
+        var bitrateBps = RequiredInt32(metadata, "bitrateBps");
         return new AudioAccept(
             RequiredInt64(metadata, "streamId"),
             RequiredString(metadata, "offerId"),
@@ -232,7 +275,9 @@ public static class AudioProtocol
             RequiredInt32(metadata, "sampleRate"),
             RequiredInt32(metadata, "channels"),
             RequiredInt32(metadata, "frameDurationMs"),
-            RequiredInt32(metadata, "bitrateBps"),
+            OptionalLatencyMode(metadata),
+            OptionalQualityMode(metadata, bitrateBps),
+            bitrateBps,
             RequiredInt32(metadata, "rtpPayloadType"),
             RequiredInt32(metadata, "rtpClockRate"),
             RequiredUInt32(metadata, "rtpSsrc"),
@@ -248,6 +293,8 @@ public static class AudioProtocol
                offer.SampleRate == SampleRate &&
                offer.Channels == Channels &&
                offer.FrameDurationMs == FrameDurationMs &&
+               IsSupportedLatencyMode(offer.LatencyMode) &&
+               IsSupportedQualityBitratePair(offer.QualityMode, offer.BitrateBps) &&
                offer.RtpPayloadType == RtpPayloadType &&
                offer.RtpClockRate == RtpClockRate;
     }
@@ -260,6 +307,8 @@ public static class AudioProtocol
                accept.SampleRate == SampleRate &&
                accept.Channels == Channels &&
                accept.FrameDurationMs == FrameDurationMs &&
+               IsSupportedLatencyMode(accept.LatencyMode) &&
+               IsSupportedQualityBitratePair(accept.QualityMode, accept.BitrateBps) &&
                accept.RtpPayloadType == RtpPayloadType &&
                accept.RtpClockRate == RtpClockRate;
     }
@@ -267,6 +316,46 @@ public static class AudioProtocol
     public static string NormalizeLatencyMode(string? value)
     {
         return value == LatencyModeStable ? LatencyModeStable : LatencyModeLow;
+    }
+
+    public static bool IsSupportedLatencyMode(string value)
+    {
+        return value is LatencyModeLow or LatencyModeStable;
+    }
+
+    public static bool IsSupportedQualityMode(string value)
+    {
+        return QualityBitrates.ContainsKey(value);
+    }
+
+    public static bool IsSupportedBitrateBps(int value)
+    {
+        return QualityBitrates.Values.Contains(value);
+    }
+
+    public static bool IsSupportedQualityBitratePair(string qualityMode, int bitrateBps)
+    {
+        return QualityBitrates.TryGetValue(qualityMode, out var expectedBitrate) &&
+               expectedBitrate == bitrateBps;
+    }
+
+    public static string NormalizeQualityMode(string? value)
+    {
+        return value != null && IsSupportedQualityMode(value)
+            ? value
+            : QualityStandard;
+    }
+
+    public static int BitrateForQualityMode(string? qualityMode)
+    {
+        return QualityBitrates.TryGetValue(qualityMode ?? "", out var bitrateBps)
+            ? bitrateBps
+            : BitrateBps;
+    }
+
+    public static bool RequiresQualitySelectionCapability(string qualityMode)
+    {
+        return NormalizeQualityMode(qualityMode) != QualityStandard;
     }
 
     public static string OptionalString(IReadOnlyDictionary<string, JsonElement> metadata, string key, string fallback = "")
@@ -367,13 +456,33 @@ public static class AudioProtocol
         }
     }
 
+    private static string OptionalLatencyMode(IReadOnlyDictionary<string, JsonElement> metadata)
+    {
+        var latencyMode = OptionalString(metadata, "latencyMode");
+        return string.IsNullOrWhiteSpace(latencyMode) ? LatencyModeLow : latencyMode;
+    }
+
+    private static string OptionalQualityMode(IReadOnlyDictionary<string, JsonElement> metadata, int bitrateBps)
+    {
+        var qualityMode = OptionalString(metadata, "qualityMode");
+        if (!string.IsNullOrWhiteSpace(qualityMode))
+        {
+            return qualityMode;
+        }
+
+        return bitrateBps == BitrateBps
+            ? QualityStandard
+            : throw new FormatException("Missing qualityMode");
+    }
+
     private static bool IsAudioCapability(string capability)
     {
         return capability is ProtocolConstants.CapabilityAudioLink
             or ProtocolConstants.CapabilityAudioCodecOpus
             or ProtocolConstants.CapabilityAudioTransportRtp
             or ProtocolConstants.CapabilityAudioRtcp
-            or ProtocolConstants.CapabilityAudioCodecLibOpus;
+            or ProtocolConstants.CapabilityAudioCodecLibOpus
+            or ProtocolConstants.CapabilityAudioQualitySelect;
     }
 
     private static bool CheckAudioRuntimeAvailable()
@@ -403,6 +512,8 @@ public sealed record AudioOffer(
     int SampleRate,
     int Channels,
     int FrameDurationMs,
+    string LatencyMode,
+    string QualityMode,
     int BitrateBps,
     int RtpPayloadType,
     int RtpClockRate,
@@ -418,6 +529,8 @@ public sealed record AudioAccept(
     int SampleRate,
     int Channels,
     int FrameDurationMs,
+    string LatencyMode,
+    string QualityMode,
     int BitrateBps,
     int RtpPayloadType,
     int RtpClockRate,
