@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Net.Sockets;
+using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -14,10 +16,9 @@ namespace WDCableWUI.Services;
 
 public sealed class SessionManager : IDisposable
 {
-    private const int MaxConnectAttempts = 10;
     private const int BulkChunkSize = 64 * 1024;
-    private static readonly TimeSpan InitialRetryDelay = TimeSpan.FromSeconds(1);
-    private static readonly TimeSpan MaxRetryDelay = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan ConnectRetryDelay = TimeSpan.FromSeconds(1);
+    private static readonly TimeSpan RendezvousSendInterval = TimeSpan.FromMilliseconds(500);
     private static readonly TimeSpan HandshakeTimeout = TimeSpan.FromSeconds(10);
     private static readonly TimeSpan SetupTimeout = TimeSpan.FromSeconds(45);
     private static readonly TimeSpan HeartbeatInterval = TimeSpan.FromSeconds(5);
@@ -109,6 +110,8 @@ public sealed class SessionManager : IDisposable
     public string? CurrentSessionId => _runtime?.SessionId ?? _activeLink?.SessionId;
 
     public SessionRole? CurrentRole => _runtime?.Role ?? _activeLink?.Role;
+
+    public SessionTransportRole? CurrentTransportRole => _runtime?.TransportRole ?? _activeLink?.TransportRole;
 
     public string? PeerName => _runtime?.PeerName ?? _activeLink?.PeerName;
 
@@ -525,16 +528,9 @@ public sealed class SessionManager : IDisposable
             }
 
             TransitionTo(SessionPhase.ConnectingTransport, link);
-            foreach (var (channel, port) in ChannelPorts())
-            {
-                setupToken.ThrowIfCancellationRequested();
-                var transport = link.Role == SessionRole.GroupOwner
-                    ? await AcceptChannelAsync(channel, port, expectedGeneration, setupToken).ConfigureAwait(false)
-                    : await ConnectChannelWithRetryAsync(channel, link.RemoteAddress, port, expectedGeneration, setupToken).ConfigureAwait(false);
-
-                openedTransports[channel] = transport;
-                EmitStatus($"{channel.GetProtocolName()} channel opened on port {port}");
-            }
+            openedTransports = link.TransportRole == SessionTransportRole.Listener
+                ? await OpenListenerTransportsAsync(link, expectedGeneration, setupToken).ConfigureAwait(false)
+                : await OpenConnectorTransportsAsync(link, expectedGeneration, setupToken).ConfigureAwait(false);
 
             var runtime = new SessionRuntime(expectedGeneration, link, openedTransports);
             TransitionTo(SessionPhase.Handshaking, link);
@@ -562,56 +558,169 @@ public sealed class SessionManager : IDisposable
                 StartControlReadLoop(runtime, cancellationToken);
                 StartBulkReadLoop(runtime, cancellationToken);
                 StartHeartbeat(runtime, cancellationToken);
-                EmitStatus($"WDCable session ready ({link.Role.GetEventName()}, protocol v{ProtocolConstants.Version})");
+                EmitStatus($"WDCable session ready ({link.Role.GetEventName()}/{link.TransportRole.GetEventName()}, protocol v{ProtocolConstants.Version})");
             }
             finally
             {
                 _lifecycleLock.Release();
             }
         }
+        catch (SessionSetupException ex)
+        {
+            CloseTransports(openedTransports.Values);
+            await FailSessionAsync(expectedGeneration, link, ex.Reason, ex, ex.IsPeerProtocolMissing).ConfigureAwait(false);
+        }
         catch (PeerProtocolMissingException ex)
         {
             CloseTransports(openedTransports.Values);
-            await FailSessionAsync(expectedGeneration, link, "peer_protocol_missing", ex, isPeerProtocolMissing: true).ConfigureAwait(false);
+            await FailSessionAsync(expectedGeneration, link, "protocol_mismatch", ex, isPeerProtocolMissing: true).ConfigureAwait(false);
         }
         catch (ProtocolException ex)
         {
             CloseTransports(openedTransports.Values);
-            var reason = ex.Error == ProtocolError.UnsupportedVersion
-                ? "unsupported_protocol_version"
-                : "protocol_error";
             await FailSessionAsync(
                 expectedGeneration,
                 link,
-                reason,
+                "protocol_mismatch",
                 ex,
-                isPeerProtocolMissing: ex.Error == ProtocolError.MalformedMagic).ConfigureAwait(false);
+                isPeerProtocolMissing: ex.Error is ProtocolError.MalformedMagic or
+                    ProtocolError.UnsupportedVersion or
+                    ProtocolError.ProtocolMismatch).ConfigureAwait(false);
         }
         catch (OperationCanceledException ex)
         {
             CloseTransports(openedTransports.Values);
             if (IsCurrent(expectedGeneration) && !cancellationToken.IsCancellationRequested)
             {
-                await FailSessionAsync(expectedGeneration, link, "peer_protocol_missing", new PeerProtocolMissingException("Timed out waiting for WDCable transport setup", ex), true).ConfigureAwait(false);
+                var reason = link.TransportRole == SessionTransportRole.Listener
+                    ? "udp_rendezvous_timeout"
+                    : "tcp_connect_timeout";
+                await FailSessionAsync(expectedGeneration, link, reason, new TimeoutException("Timed out waiting for WDCable transport setup", ex), false).ConfigureAwait(false);
             }
         }
         catch (Exception ex)
         {
             CloseTransports(openedTransports.Values);
-            await FailSessionAsync(expectedGeneration, link, "transport_setup_failed", ex, isPeerProtocolMissing: false).ConfigureAwait(false);
+            var reason = link.TransportRole == SessionTransportRole.Listener
+                ? "bind_failed"
+                : "tcp_connect_timeout";
+            await FailSessionAsync(expectedGeneration, link, reason, ex, isPeerProtocolMissing: false).ConfigureAwait(false);
         }
     }
 
-    private Task<ISessionTransport> AcceptChannelAsync(
-        ProtocolChannel channel,
-        int port,
+    private async Task<Dictionary<ProtocolChannel, ISessionTransport>> OpenListenerTransportsAsync(
+        SessionLinkInfo link,
         int expectedGeneration,
         CancellationToken cancellationToken)
     {
-        var adapter = RequireTransportAdapter();
-        var localAddress = ParseAddressOrAny(_activeLink?.LocalAddress);
-        EmitStatus($"Accepting {channel.GetProtocolName()} channel on port {port}");
-        return adapter.AcceptAsync(channel, localAddress, port, () => !IsCurrent(expectedGeneration), cancellationToken);
+        var transports = new Dictionary<ProtocolChannel, ISessionTransport>();
+        var listeners = new Dictionary<ProtocolChannel, ISessionTransportListener>();
+        var acceptTasks = new Dictionary<ProtocolChannel, Task<ISessionTransport>>();
+
+        try
+        {
+            var localAddress = ParseRequiredAddress(link.LocalAddress, "bind_failed");
+            foreach (var (channel, port) in ChannelPorts())
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                EmitStatus($"Binding TCP {channel.GetProtocolName()} listener on {localAddress}:{port}");
+                try
+                {
+                    var listener = RequireTransportAdapter().Listen(channel, localAddress, port);
+                    listeners[channel] = listener;
+                    EmitStatus($"Bound TCP {channel.GetProtocolName()} listener on {localAddress}:{listener.Port}");
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    throw new SessionSetupException(
+                        "bind_failed",
+                        $"Could not bind {channel.GetProtocolName()} listener on {localAddress}:{port}",
+                        ex);
+                }
+            }
+
+            foreach (var (channel, listener) in listeners)
+            {
+                acceptTasks[channel] = listener.AcceptAsync(() => !IsCurrent(expectedGeneration), cancellationToken);
+                EmitStatus($"Accepting TCP {channel.GetProtocolName()} channel on {link.LocalAddress}:{listener.Port}");
+            }
+
+            using var rendezvousCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            var rendezvousTask = SendUdpRendezvousUntilControlAcceptedAsync(
+                link,
+                acceptTasks[ProtocolChannel.Control],
+                rendezvousCts.Token);
+
+            try
+            {
+                foreach (var (channel, port) in ChannelPorts())
+                {
+                    var transport = await acceptTasks[channel].ConfigureAwait(false);
+                    transports[channel] = transport;
+                    EmitStatus($"{channel.GetProtocolName()} channel accepted on port {port}");
+
+                    if (channel == ProtocolChannel.Control)
+                    {
+                        rendezvousCts.Cancel();
+                    }
+                }
+
+                return transports;
+            }
+            finally
+            {
+                rendezvousCts.Cancel();
+                await ObserveTaskQuietlyAsync(rendezvousTask).ConfigureAwait(false);
+            }
+        }
+        catch
+        {
+            CloseTransports(transports.Values);
+            throw;
+        }
+        finally
+        {
+            foreach (var listener in listeners.Values)
+            {
+                try
+                {
+                    listener.Dispose();
+                }
+                catch
+                {
+                }
+            }
+        }
+    }
+
+    private async Task<Dictionary<ProtocolChannel, ISessionTransport>> OpenConnectorTransportsAsync(
+        SessionLinkInfo link,
+        int expectedGeneration,
+        CancellationToken cancellationToken)
+    {
+        var transports = new Dictionary<ProtocolChannel, ISessionTransport>();
+        try
+        {
+            foreach (var (channel, port) in ChannelPorts())
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var transport = await ConnectChannelWithRetryAsync(
+                    channel,
+                    link.RemoteAddress,
+                    port,
+                    expectedGeneration,
+                    cancellationToken).ConfigureAwait(false);
+                transports[channel] = transport;
+                EmitStatus($"{channel.GetProtocolName()} channel connected to {link.RemoteAddress}:{port}");
+            }
+
+            return transports;
+        }
+        catch
+        {
+            CloseTransports(transports.Values);
+            throw;
+        }
     }
 
     private async Task<ISessionTransport> ConnectChannelWithRetryAsync(
@@ -622,20 +731,20 @@ public sealed class SessionManager : IDisposable
         CancellationToken cancellationToken)
     {
         Exception? lastError = null;
-        for (var attempt = 1; attempt <= MaxConnectAttempts && IsCurrent(expectedGeneration); attempt++)
+        var attempt = 0;
+        while (IsCurrent(expectedGeneration) && !cancellationToken.IsCancellationRequested)
         {
+            attempt++;
             try
             {
-                EmitStatus($"Connecting {channel.GetProtocolName()} channel to {host}:{port} (attempt {attempt}/{MaxConnectAttempts})");
+                EmitStatus($"Connecting {channel.GetProtocolName()} channel to {host}:{port} (attempt {attempt})");
                 return await RequireTransportAdapter().ConnectAsync(channel, host, port, cancellationToken).ConfigureAwait(false);
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
             {
                 lastError = ex;
-                if (attempt < MaxConnectAttempts)
-                {
-                    await Task.Delay(ConnectRetryDelay(attempt), cancellationToken).ConfigureAwait(false);
-                }
+                EmitStatus($"TCP {channel.GetProtocolName()} connect attempt {attempt} failed: {ex.Message}");
+                await Task.Delay(ConnectRetryDelay, cancellationToken).ConfigureAwait(false);
             }
         }
 
@@ -644,9 +753,56 @@ public sealed class SessionManager : IDisposable
             throw new OperationCanceledException(cancellationToken);
         }
 
-        throw new PeerProtocolMissingException(
-            $"Could not connect to WDCable {channel.GetProtocolName()} channel at {host}:{port}",
-            lastError ?? new IOException("Connection attempts exhausted."));
+        throw new OperationCanceledException(
+            $"Timed out connecting WDCable {channel.GetProtocolName()} channel at {host}:{port}",
+            lastError,
+            cancellationToken);
+    }
+
+    private async Task SendUdpRendezvousUntilControlAcceptedAsync(
+        SessionLinkInfo link,
+        Task<ISessionTransport> controlAcceptTask,
+        CancellationToken cancellationToken)
+    {
+        var localAddress = ParseRequiredAddress(link.LocalAddress, "bind_failed");
+        var remoteAddress = ParseRequiredAddress(link.RemoteAddress, "endpoint_unavailable");
+        var remoteEndPoint = new IPEndPoint(remoteAddress, ProtocolConstants.DefaultRendezvousPort);
+        var localEndPoint = new IPEndPoint(localAddress, 0);
+        var successLogged = false;
+
+        EmitStatus($"UDP rendezvous send started to {remoteEndPoint}");
+
+        using var udpClient = new UdpClient(localEndPoint);
+        while (!controlAcceptTask.IsCompleted && !cancellationToken.IsCancellationRequested)
+        {
+            try
+            {
+                var payload = SessionRendezvousPayload.Build(
+                    link.RendezvousId,
+                    link.Role,
+                    link.TransportRole);
+                var bytes = Encoding.UTF8.GetBytes(payload);
+                await udpClient.SendAsync(bytes, bytes.Length, remoteEndPoint)
+                    .WaitAsync(cancellationToken)
+                    .ConfigureAwait(false);
+
+                if (!successLogged)
+                {
+                    successLogged = true;
+                    EmitStatus($"UDP rendezvous packet sent to {remoteEndPoint}");
+                }
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                break;
+            }
+            catch (Exception ex)
+            {
+                EmitError($"UDP rendezvous send failed: {ex.Message}");
+            }
+
+            await Task.Delay(RendezvousSendInterval, cancellationToken).ConfigureAwait(false);
+        }
     }
 
     private async Task PerformHandshakeAsync(SessionRuntime runtime, CancellationToken cancellationToken)
@@ -666,7 +822,10 @@ public sealed class SessionManager : IDisposable
                     throw new PeerProtocolMissingException($"Expected handshake ack, received {ack.Type.GetProtocolName()}");
                 }
 
-                runtime.SetPeerCapabilities(ValidateHandshakeAck(ack.MetadataJson));
+                runtime.SetPeerCapabilities(SessionHandshakeMetadata.ValidateAck(
+                    ack.MetadataJson,
+                    runtime.Role.GetPeerRole(),
+                    runtime.TransportRole.GetPeerRole()));
             }
             else
             {
@@ -677,17 +836,24 @@ public sealed class SessionManager : IDisposable
                     throw new PeerProtocolMissingException($"Expected handshake hello, received {hello.Type.GetProtocolName()}");
                 }
 
-                runtime.SetPeerCapabilities(ValidateHandshakeHello(hello.MetadataJson));
+                runtime.SetPeerCapabilities(SessionHandshakeMetadata.ValidateHello(
+                    hello.MetadataJson,
+                    runtime.Role.GetPeerRole(),
+                    runtime.TransportRole.GetPeerRole()));
                 await runtime.ControlTransport.WriteFrameAsync(BuildHandshakeAck(runtime), timeoutCts.Token).ConfigureAwait(false);
             }
         }
         catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
         {
-            throw new PeerProtocolMissingException("Timed out waiting for WDCable handshake", ex);
+            throw new SessionSetupException("handshake_timeout", "Timed out waiting for WDCable handshake", ex);
         }
         catch (JsonException ex)
         {
-            throw new PeerProtocolMissingException("Invalid handshake metadata", ex);
+            throw new SessionSetupException(
+                "protocol_mismatch",
+                "Invalid handshake metadata",
+                ex,
+                isPeerProtocolMissing: true);
         }
     }
 
@@ -720,17 +886,14 @@ public sealed class SessionManager : IDisposable
 
     private Dictionary<string, object?> BaseHandshakeMetadata(SessionRuntime runtime)
     {
-        return new Dictionary<string, object?>
-        {
-            ["appId"] = ProtocolConstants.AppId,
-            ["platform"] = "windows",
-            ["appVersion"] = AppVersion(),
-            ["deviceName"] = Environment.MachineName,
-            ["role"] = runtime.Role.GetEventName(),
-            ["sessionId"] = runtime.SessionId,
-            ["capabilities"] = ProtocolConstants.AdvertisedCapabilities,
-            ["channels"] = ChannelsMetadata()
-        };
+        return SessionHandshakeMetadata.BuildBase(
+            "windows",
+            AppVersion(),
+            Environment.MachineName,
+            runtime.Role,
+            runtime.TransportRole,
+            runtime.SessionId,
+            ChannelsMetadata());
     }
 
     private static Dictionary<string, object> ChannelsMetadata()
@@ -742,77 +905,6 @@ public sealed class SessionManager : IDisposable
                 ["transport"] = "tcp",
                 ["port"] = pair.Port
             });
-    }
-
-    private static IReadOnlyList<string> ValidateHandshakeHello(string metadataJson)
-    {
-        using var document = JsonDocument.Parse(metadataJson);
-        var root = document.RootElement;
-        ValidateAppId(root);
-
-        var protocolMin = GetInt(root, "protocolMin", -1);
-        var protocolMax = GetInt(root, "protocolMax", -1);
-        if (ProtocolConstants.Version < protocolMin || ProtocolConstants.Version > protocolMax)
-        {
-            throw new ProtocolException(
-                ProtocolError.UnsupportedVersion,
-                $"Peer supports protocol {protocolMin}..{protocolMax}");
-        }
-
-        return ReadCapabilities(root);
-    }
-
-    private static IReadOnlyList<string> ValidateHandshakeAck(string metadataJson)
-    {
-        using var document = JsonDocument.Parse(metadataJson);
-        var root = document.RootElement;
-        ValidateAppId(root);
-
-        var protocolVersion = GetInt(root, "protocolVersion", -1);
-        if (protocolVersion != ProtocolConstants.Version)
-        {
-            throw new ProtocolException(
-                ProtocolError.UnsupportedVersion,
-                $"Peer selected unsupported protocol {protocolVersion}");
-        }
-
-        return ReadCapabilities(root);
-    }
-
-    private static void ValidateAppId(JsonElement root)
-    {
-        if (!root.TryGetProperty("appId", out var appId) || appId.GetString() != ProtocolConstants.AppId)
-        {
-            throw new PeerProtocolMissingException("Peer app id is not WDCable");
-        }
-    }
-
-    private static int GetInt(JsonElement root, string propertyName, int fallback)
-    {
-        return root.TryGetProperty(propertyName, out var property) && property.TryGetInt32(out var value)
-            ? value
-            : fallback;
-    }
-
-    private static IReadOnlyList<string> ReadCapabilities(JsonElement root)
-    {
-        if (!root.TryGetProperty("capabilities", out var capabilities) ||
-            capabilities.ValueKind != JsonValueKind.Array)
-        {
-            return [];
-        }
-
-        var result = new List<string>();
-        foreach (var capability in capabilities.EnumerateArray())
-        {
-            var value = capability.GetString();
-            if (!string.IsNullOrWhiteSpace(value))
-            {
-                result.Add(value);
-            }
-        }
-
-        return result;
     }
 
     private static bool IsAudioFeatureError(string metadataJson)
@@ -1047,7 +1139,7 @@ public sealed class SessionManager : IDisposable
             TransitionTo(SessionPhase.Failed, link, reason);
 
             var message = exception.Message;
-            var args = new SessionFailedEventArgs(reason, message, link.SessionId, link.Role, isPeerProtocolMissing);
+            var args = new SessionFailedEventArgs(reason, message, link.SessionId, link.Role, link.TransportRole, isPeerProtocolMissing);
             RaiseEvent(SessionFailed, args);
             if (isPeerProtocolMissing)
             {
@@ -1117,6 +1209,7 @@ public sealed class SessionManager : IDisposable
                 phase,
                 link?.SessionId ?? CurrentSessionId,
                 link?.Role ?? CurrentRole,
+                link?.TransportRole ?? CurrentTransportRole,
                 link?.PeerName ?? PeerName,
                 link?.RemoteAddress ?? PeerAddress,
                 reason ?? _lastDisconnectReason));
@@ -1129,6 +1222,7 @@ public sealed class SessionManager : IDisposable
             new SessionReadyEventArgs(
                 runtime.SessionId,
                 runtime.Role,
+                runtime.TransportRole,
                 runtime.PeerName,
                 runtime.PeerAddress,
                 ProtocolConstants.Version,
@@ -1201,6 +1295,7 @@ public sealed class SessionManager : IDisposable
 
         return _activeLink.PeerId == link.PeerId &&
                _activeLink.Role == link.Role &&
+               _activeLink.TransportRole == link.TransportRole &&
                _activeLink.LocalAddress == link.LocalAddress &&
                _activeLink.RemoteAddress == link.RemoteAddress;
     }
@@ -1222,11 +1317,15 @@ public sealed class SessionManager : IDisposable
             throw new InvalidOperationException("Remote WiFi Direct IP is not available.");
         }
 
+        var role = wifiDirectService.IsGroupOwner ? SessionRole.GroupOwner : SessionRole.Client;
+        var transportRole = wifiDirectService.TransportRole ?? role.GetTransportRole();
         return new SessionLinkInfo(
+            Guid.NewGuid().ToString(),
             Guid.NewGuid().ToString(),
             device.Id,
             device.Name,
-            wifiDirectService.IsGroupOwner ? SessionRole.GroupOwner : SessionRole.Client,
+            role,
+            transportRole,
             wifiDirectService.LocalIP,
             wifiDirectService.RemoteIP);
     }
@@ -1236,6 +1335,16 @@ public sealed class SessionManager : IDisposable
         return IPAddress.TryParse(address, out var parsed) ? parsed : IPAddress.Any;
     }
 
+    private static IPAddress ParseRequiredAddress(string address, string reason)
+    {
+        if (IPAddress.TryParse(address, out var parsed))
+        {
+            return parsed;
+        }
+
+        throw new SessionSetupException(reason, $"Invalid IP address: {address}");
+    }
+
     private static IReadOnlyList<(ProtocolChannel Channel, int Port)> ChannelPorts()
     {
         return
@@ -1243,12 +1352,6 @@ public sealed class SessionManager : IDisposable
             (ProtocolChannel.Control, ProtocolConstants.DefaultControlPort),
             (ProtocolChannel.Bulk, ProtocolConstants.DefaultBulkPort)
         ];
-    }
-
-    private static TimeSpan ConnectRetryDelay(int attempt)
-    {
-        var milliseconds = InitialRetryDelay.TotalMilliseconds * Math.Pow(2, attempt - 1);
-        return TimeSpan.FromMilliseconds(Math.Min(milliseconds, MaxRetryDelay.TotalMilliseconds));
     }
 
     private static string AppVersion()
@@ -1279,11 +1382,42 @@ public sealed class SessionManager : IDisposable
         }
     }
 
+    private static async Task ObserveTaskQuietlyAsync(Task task)
+    {
+        try
+        {
+            await task.ConfigureAwait(false);
+        }
+        catch
+        {
+        }
+    }
+
+    private sealed class SessionSetupException : IOException
+    {
+        public SessionSetupException(
+            string reason,
+            string message,
+            Exception? innerException = null,
+            bool isPeerProtocolMissing = false)
+            : base(message, innerException)
+        {
+            Reason = reason;
+            IsPeerProtocolMissing = isPeerProtocolMissing;
+        }
+
+        public string Reason { get; }
+
+        public bool IsPeerProtocolMissing { get; }
+    }
+
     private sealed record SessionLinkInfo(
         string SessionId,
+        string RendezvousId,
         string PeerId,
         string PeerName,
         SessionRole Role,
+        SessionTransportRole TransportRole,
         string LocalAddress,
         string RemoteAddress);
 
@@ -1310,6 +1444,8 @@ public sealed class SessionManager : IDisposable
         public string SessionId => Link.SessionId;
 
         public SessionRole Role => Link.Role;
+
+        public SessionTransportRole TransportRole => Link.TransportRole;
 
         public string PeerName => Link.PeerName;
 

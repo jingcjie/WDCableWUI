@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Linq;
@@ -103,6 +104,8 @@ namespace WDCableWUI.Services
 
         public bool IsGroupOwner { get; private set; }
 
+        public SessionTransportRole? TransportRole { get; private set; }
+
         public string? LocalIP { get; private set; }
 
         public string? RemoteIP { get; private set; }
@@ -115,7 +118,8 @@ namespace WDCableWUI.Services
             {
                 var local = string.IsNullOrWhiteSpace(LocalIP) ? "unavailable" : LocalIP;
                 var remote = string.IsNullOrWhiteSpace(RemoteIP) ? "unavailable" : RemoteIP;
-                return $"Role: {RoleName}; Local endpoint: {local}; Remote endpoint: {remote}";
+                var transport = TransportRole?.GetEventName() ?? "unavailable";
+                return $"Role: {RoleName}; Transport role: {transport}; Local endpoint: {local}; Remote endpoint: {remote}";
             }
         }
 
@@ -125,14 +129,6 @@ namespace WDCableWUI.Services
         public event EventHandler<string>? StatusChanged;
         public event EventHandler<string>? ErrorOccurred;
         public event EventHandler<ConnectionRequestEventArgs>? ConnectionRequested;
-
-        public void SetConnectionService(ConnectionService connectionService)
-        {
-            if (connectionService != null)
-            {
-                connectionService.OtherSideNotRunningApp += OnOtherSideNotRunningApp;
-            }
-        }
 
         public Task<bool> StartAdvertisingAsync(string deviceName = DefaultDeviceName)
         {
@@ -468,8 +464,8 @@ namespace WDCableWUI.Services
                         AddDeviceBusyRecoveryHint($"WiFi Direct endpoint readiness timed out for {device.Name}"),
                         opId,
                         api: "WiFiDirectDevice.GetConnectionEndpointPairs",
-                        result: "timeout",
-                        reason: "outbound_connect",
+                        result: "endpoint_unavailable",
+                        reason: "endpoint_unavailable",
                         peer: device);
                     return false;
                 }
@@ -538,6 +534,7 @@ namespace WDCableWUI.Services
 
                 _connectedDevice = null;
                 IsGroupOwner = false;
+                TransportRole = null;
                 LocalIP = null;
                 RemoteIP = null;
 
@@ -617,21 +614,10 @@ namespace WDCableWUI.Services
 
             _connectedDevice = null;
             IsGroupOwner = false;
+            TransportRole = null;
             LocalIP = null;
             RemoteIP = null;
             _connectionLock.Dispose();
-        }
-
-        private async void OnOtherSideNotRunningApp(object? sender, EventArgs e)
-        {
-            OnStatusChanged(
-                "Other side is not running the app. Disconnecting",
-                NextOperationId(),
-                api: "ConnectionService.OtherSideNotRunningApp",
-                callback: "OtherSideNotRunningApp",
-                result: "disconnecting",
-                reason: "peer_protocol_missing");
-            await DisconnectAsync("peer_protocol_missing").ConfigureAwait(false);
         }
 
         private void EnsurePublisher(string deviceName, string opId, string reason)
@@ -997,8 +983,8 @@ namespace WDCableWUI.Services
                         AddDeviceBusyRecoveryHint($"WiFi Direct endpoint readiness timed out for accepted request from {requestingDevice.Name}"),
                         opId,
                         api: "WiFiDirectDevice.GetConnectionEndpointPairs",
-                        result: "timeout",
-                        reason: "incoming_connect",
+                        result: "endpoint_unavailable",
+                        reason: "endpoint_unavailable",
                         peer: requestingDevice);
                     return;
                 }
@@ -1096,11 +1082,11 @@ namespace WDCableWUI.Services
             {
                 try
                 {
-                    var endpoint = TryGetFirstIpv4Endpoint(nativeDevice);
+                    var endpoint = TrySelectEndpoint(nativeDevice, opId, reason, peer);
                     if (endpoint != null)
                     {
                         OnStatusChanged(
-                            $"Endpoint polling succeeded. Local: {endpoint.LocalIP}; Remote: {endpoint.RemoteIP}",
+                            $"Endpoint polling succeeded. Local: {endpoint.LocalIP}; Remote: {endpoint.RemoteIP}; Role: {endpoint.Role.GetEventName()}; Transport: {endpoint.TransportRole.GetEventName()}",
                             opId,
                             api: "WiFiDirectDevice.GetConnectionEndpointPairs",
                             result: "success",
@@ -1129,31 +1115,52 @@ namespace WDCableWUI.Services
                 "Endpoint polling timed out before an IPv4 endpoint pair was available",
                 opId,
                 api: "WiFiDirectDevice.GetConnectionEndpointPairs",
-                result: "timeout",
-                reason: reason,
+                result: "endpoint_unavailable",
+                reason: "endpoint_unavailable",
                 peer: peer);
             return null;
         }
 
-        private static EndpointInfo? TryGetFirstIpv4Endpoint(Windows.Devices.WiFiDirect.WiFiDirectDevice nativeDevice)
+        private EndpointInfo? TrySelectEndpoint(
+            Windows.Devices.WiFiDirect.WiFiDirectDevice nativeDevice,
+            string opId,
+            string reason,
+            WiFiDirectDevice peer)
         {
-            foreach (var pair in nativeDevice.GetConnectionEndpointPairs())
+            var endpointPairs = nativeDevice.GetConnectionEndpointPairs()
+                .Select(pair => new WiFiDirectEndpointPair(
+                    pair.LocalHostName?.ToString(),
+                    pair.RemoteHostName?.ToString()))
+                .ToList();
+
+            OnStatusChanged(
+                $"Endpoint pairs returned: {FormatEndpointPairs(endpointPairs)}",
+                opId,
+                api: "WiFiDirectDevice.GetConnectionEndpointPairs",
+                result: endpointPairs.Count == 0 ? "empty" : "pairs_returned",
+                reason: reason,
+                peer: peer);
+
+            var selection = WiFiDirectEndpointSelector.Select(
+                endpointPairs,
+                WiFiDirectEndpointSelector.GetLocalIpv4Addresses());
+            if (selection == null)
             {
-                var localIp = pair.LocalHostName?.ToString();
-                var remoteIp = pair.RemoteHostName?.ToString();
-                if (IsIpv4Address(localIp) && IsIpv4Address(remoteIp))
-                {
-                    return new EndpointInfo(localIp!, remoteIp!);
-                }
+                return null;
             }
 
-            return null;
+            return new EndpointInfo(
+                selection.LocalIP,
+                selection.RemoteIP,
+                selection.Role,
+                selection.TransportRole);
         }
 
-        private static bool IsIpv4Address(string? value)
+        private static string FormatEndpointPairs(IReadOnlyList<WiFiDirectEndpointPair> endpointPairs)
         {
-            return IPAddress.TryParse(value, out var address) &&
-                   address.AddressFamily == AddressFamily.InterNetwork;
+            return endpointPairs.Count == 0
+                ? "none"
+                : string.Join(", ", endpointPairs.Select(pair => $"{ValueOrNone(pair.LocalIP)}->{ValueOrNone(pair.RemoteIP)}"));
         }
 
         private void ApplyConnectedDevice(
@@ -1170,10 +1177,11 @@ namespace WDCableWUI.Services
             _wifiDirectDevice.ConnectionStatusChanged += OnConnectionStatusChanged;
             LocalIP = endpoint.LocalIP;
             RemoteIP = endpoint.RemoteIP;
-            IsGroupOwner = DetermineGroupOwnerStatus(endpoint.LocalIP, endpoint.RemoteIP, opId, reason, device);
+            IsGroupOwner = endpoint.Role == SessionRole.GroupOwner;
+            TransportRole = endpoint.TransportRole;
             SetState(WiFiDirectServiceState.Connected, opId, "WiFiDirectDevice.GetConnectionEndpointPairs", result: "connected", reason: reason, peer: device);
             OnStatusChanged(
-                $"Role inferred from endpoint IPs: {RoleName}. {EndpointDiagnostics}",
+                $"Roles inferred from endpoint IPs: WiFi Direct {endpoint.Role.GetEventName()}, transport {endpoint.TransportRole.GetEventName()}. {EndpointDiagnostics}",
                 opId,
                 api: "WiFiDirectDevice.GetConnectionEndpointPairs",
                 result: "role_inferred",
@@ -1181,47 +1189,6 @@ namespace WDCableWUI.Services
                 peer: device,
                 localIp: endpoint.LocalIP,
                 remoteIp: endpoint.RemoteIP);
-        }
-
-        private bool DetermineGroupOwnerStatus(string localIp, string remoteIp, string opId, string reason, WiFiDirectDevice? peer)
-        {
-            if (!IPAddress.TryParse(localIp, out var localAddress) ||
-                !IPAddress.TryParse(remoteIp, out var remoteAddress))
-            {
-                OnErrorOccurred(
-                    $"Could not parse IP addresses - Local: {localIp}, Remote: {remoteIp}",
-                    opId,
-                    api: "IPAddress.TryParse",
-                    result: "failed",
-                    reason: reason,
-                    peer: peer,
-                    localIp: localIp,
-                    remoteIp: remoteIp);
-                return false;
-            }
-
-            if (localAddress.AddressFamily != AddressFamily.InterNetwork ||
-                remoteAddress.AddressFamily != AddressFamily.InterNetwork)
-            {
-                OnErrorOccurred(
-                    $"Group owner inference expects IPv4 endpoints - Local: {localIp}, Remote: {remoteIp}",
-                    opId,
-                    api: "WiFiDirectDevice.GetConnectionEndpointPairs",
-                    result: "not_ipv4",
-                    reason: reason,
-                    peer: peer,
-                    localIp: localIp,
-                    remoteIp: remoteIp);
-                return false;
-            }
-
-            var localBytes = localAddress.GetAddressBytes();
-            var remoteBytes = remoteAddress.GetAddressBytes();
-            var sameSubnet = localBytes[0] == remoteBytes[0] &&
-                             localBytes[1] == remoteBytes[1] &&
-                             localBytes[2] == remoteBytes[2];
-
-            return sameSubnet ? localBytes[3] < remoteBytes[3] : localBytes[3] == 1;
         }
 
         private void RestorePostConnectionAttemptState(string opId, string reason)
@@ -1235,6 +1202,7 @@ namespace WDCableWUI.Services
             }
 
             IsGroupOwner = false;
+            TransportRole = null;
             LocalIP = null;
             RemoteIP = null;
             RefreshOperationalState(opId, reason, force: true);
@@ -1611,6 +1579,10 @@ namespace WDCableWUI.Services
             ObjectDisposedException.ThrowIf(_isDisposed, this);
         }
 
-        private sealed record EndpointInfo(string LocalIP, string RemoteIP);
+        private sealed record EndpointInfo(
+            string LocalIP,
+            string RemoteIP,
+            SessionRole Role,
+            SessionTransportRole TransportRole);
     }
 }

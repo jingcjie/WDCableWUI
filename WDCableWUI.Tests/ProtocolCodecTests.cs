@@ -81,7 +81,7 @@ public sealed class ProtocolCodecTests
     public void UnsupportedVersionThrowsTypedError()
     {
         var encoded = ProtocolCodec.Encode(new ProtocolFrame(ProtocolFrameType.HeartbeatPing, ProtocolChannel.Control));
-        encoded[5] = 2;
+        encoded[5] = 1;
 
         AssertProtocolError(ProtocolError.UnsupportedVersion, () => ProtocolCodec.ReadFrame(new MemoryStream(encoded)));
     }

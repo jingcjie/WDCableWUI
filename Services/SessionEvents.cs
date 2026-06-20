@@ -10,6 +10,7 @@ public sealed class SessionStateChangedEventArgs : EventArgs
         SessionPhase phase,
         string? sessionId,
         SessionRole? role,
+        SessionTransportRole? transportRole,
         string? peerName,
         string? peerAddress,
         string? disconnectReason)
@@ -17,6 +18,7 @@ public sealed class SessionStateChangedEventArgs : EventArgs
         Phase = phase;
         SessionId = sessionId;
         Role = role;
+        TransportRole = transportRole;
         PeerName = peerName;
         PeerAddress = peerAddress;
         DisconnectReason = disconnectReason;
@@ -30,6 +32,8 @@ public sealed class SessionStateChangedEventArgs : EventArgs
 
     public SessionRole? Role { get; }
 
+    public SessionTransportRole? TransportRole { get; }
+
     public string? PeerName { get; }
 
     public string? PeerAddress { get; }
@@ -42,6 +46,7 @@ public sealed class SessionReadyEventArgs : EventArgs
     public SessionReadyEventArgs(
         string sessionId,
         SessionRole role,
+        SessionTransportRole transportRole,
         string? peerName,
         string? peerAddress,
         int protocolVersion,
@@ -50,6 +55,7 @@ public sealed class SessionReadyEventArgs : EventArgs
     {
         SessionId = sessionId;
         Role = role;
+        TransportRole = transportRole;
         PeerName = peerName;
         PeerAddress = peerAddress;
         ProtocolVersion = protocolVersion;
@@ -60,6 +66,8 @@ public sealed class SessionReadyEventArgs : EventArgs
     public string SessionId { get; }
 
     public SessionRole Role { get; }
+
+    public SessionTransportRole TransportRole { get; }
 
     public string? PeerName { get; }
 
@@ -79,12 +87,14 @@ public sealed class SessionFailedEventArgs : EventArgs
         string message,
         string? sessionId,
         SessionRole? role,
+        SessionTransportRole? transportRole,
         bool isPeerProtocolMissing)
     {
         Reason = reason;
         Message = message;
         SessionId = sessionId;
         Role = role;
+        TransportRole = transportRole;
         IsPeerProtocolMissing = isPeerProtocolMissing;
     }
 
@@ -95,6 +105,8 @@ public sealed class SessionFailedEventArgs : EventArgs
     public string? SessionId { get; }
 
     public SessionRole? Role { get; }
+
+    public SessionTransportRole? TransportRole { get; }
 
     public bool IsPeerProtocolMissing { get; }
 }

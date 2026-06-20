@@ -20,7 +20,6 @@ namespace WDCableWUI.Services
         private static DataManager? _dataManager;
         private static WiFiDirectService? _wifiDirectService;
         private static SessionManager? _sessionManager;
-        private static ConnectionService? _connectionService;
         private static ChatService? _chatService;
         private static SpeedTestService? _speedTestService;
         private static FileTransferService? _fileTransferService;
@@ -76,17 +75,6 @@ namespace WDCableWUI.Services
             }
         }
 
-        /// <summary>
-        /// Gets the singleton ConnectionService instance.
-        /// </summary>
-        public static ConnectionService? ConnectionService
-        {
-            get
-            {
-                return _connectionService;
-            }
-        }
-        
         /// <summary>
         /// Gets the ChatService instance.
         /// </summary>
@@ -188,16 +176,9 @@ namespace WDCableWUI.Services
                     _wifiDirectService = new WiFiDirectService();
                     _sessionManager = WDCableWUI.Services.SessionManager.Instance;
                     _sessionManager.Initialize(_wifiDirectService);
-                    _connectionService = ConnectionService.Instance;
+                    _sessionManager.PeerProtocolMissing += OnSessionPeerProtocolMissing;
 
-                    // ConnectionService is now a compatibility facade over SessionManager.
-                    _connectionService.Initialize(_wifiDirectService, _sessionManager);
-
-                    // Set up bidirectional event subscription
-                    _wifiDirectService.SetConnectionService(_connectionService);
-
-                    // Initialize ChatService and SpeedTestService after WiFiDirectService
-                    // These will be initialized when ConnectionService is established
+                    // Initialize feature services after WiFiDirectService and SessionManager.
                     InitializeAdditionalServices();
                     _areWiFiDirectServicesAvailable = true;
                 }
@@ -390,7 +371,7 @@ namespace WDCableWUI.Services
             FileTransferService.ResetInstance();
             WDCableWUI.Services.AudioService.ResetInstance();
 
-            // Create new instances - these will automatically subscribe to ConnectionService events
+            // Create new instances; feature services subscribe to SessionManager events.
             _chatService = ChatService.Instance;
             _speedTestService = SpeedTestService.Instance;
             _fileTransferService = FileTransferService.Instance;
@@ -412,13 +393,33 @@ namespace WDCableWUI.Services
             _audioService = null;
         }
 
+        private static async void OnSessionPeerProtocolMissing(object? sender, SessionFailedEventArgs e)
+        {
+            var wifiDirectService = _wifiDirectService;
+            if (wifiDirectService == null)
+            {
+                return;
+            }
+
+            try
+            {
+                Debug.WriteLine($"Peer protocol mismatch detected; disconnecting Wi-Fi Direct. reason={e.Reason}");
+                await wifiDirectService.DisconnectAsync("peer_protocol_missing").ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error disconnecting Wi-Fi Direct after peer protocol mismatch: {ex}");
+            }
+        }
+
         private static void DisposeWiFiDirectServices()
         {
             DisposeFeatureServices();
 
-            TryDispose(ConnectionService.ResetInstance, "ConnectionService");
-            _connectionService = null;
-
+            if (_sessionManager != null)
+            {
+                _sessionManager.PeerProtocolMissing -= OnSessionPeerProtocolMissing;
+            }
             TryDispose(SessionManager.ResetInstance, "SessionManager");
             _sessionManager = null;
 

@@ -22,6 +22,11 @@
     <Compile Include="..\Services\WiFiDirectCapabilityReport.cs" Link="Services\%(Filename)%(Extension)" />
     <Compile Include="..\Services\WiFiDirectAdapterRemovalLauncher.cs" Link="Services\%(Filename)%(Extension)" />
     <Compile Include="..\Services\WiFiDirectCleanupCoordinator.cs" Link="Services\%(Filename)%(Extension)" />
+    <Compile Include="..\Services\WiFiDirectEndpointSelector.cs" Link="Services\%(Filename)%(Extension)" />
+    <Compile Include="..\Services\SessionRole.cs" Link="Services\%(Filename)%(Extension)" />
+    <Compile Include="..\Services\SessionTransportRole.cs" Link="Services\%(Filename)%(Extension)" />
+    <Compile Include="..\Services\SessionRendezvousPayload.cs" Link="Services\%(Filename)%(Extension)" />
+    <Compile Include="..\Services\SessionHandshakeMetadata.cs" Link="Services\%(Filename)%(Extension)" />
     <Compile Include="..\Services\SessionPhase.cs" Link="Services\%(Filename)%(Extension)" />
     <Compile Include="..\Services\SessionStateMachine.cs" Link="Services\%(Filename)%(Extension)" />
   </ItemGroup>

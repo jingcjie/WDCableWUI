@@ -17,4 +17,14 @@ public static class SessionRoleExtensions
             _ => role.ToString()
         };
     }
+
+    public static SessionRole GetPeerRole(this SessionRole role)
+    {
+        return role switch
+        {
+            SessionRole.GroupOwner => SessionRole.Client,
+            SessionRole.Client => SessionRole.GroupOwner,
+            _ => role
+        };
+    }
 }

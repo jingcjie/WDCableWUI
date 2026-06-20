@@ -20,8 +20,6 @@ namespace WDCableWUI.UI.SpeedTest
         private bool _isDownloadTestRunning;
         private SpeedTestService? _speedTestService;
         private SpeedTestService? _subscribedSpeedTestService;
-        private ConnectionService? _connectionService;
-        private ConnectionService? _subscribedConnectionService;
         private SessionManager? _sessionManager;
         private SessionManager? _subscribedSessionManager;
         private readonly DataManager _dataManager;
@@ -67,14 +65,12 @@ namespace WDCableWUI.UI.SpeedTest
             try
             {
                 _speedTestService = ServiceManager.AreWiFiDirectServicesAvailable ? ServiceManager.SpeedTestService : null;
-                _connectionService = ServiceManager.AreWiFiDirectServicesAvailable ? ServiceManager.ConnectionService : null;
                 _sessionManager = ServiceManager.AreWiFiDirectServicesAvailable ? ServiceManager.SessionManager : null;
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"Failed to initialize services in SpeedTestPage: {ex.Message}");
                 _speedTestService = null;
-                _connectionService = null;
                 _sessionManager = null;
             }
         }
@@ -93,18 +89,11 @@ namespace WDCableWUI.UI.SpeedTest
                 _subscribedSpeedTestService = _speedTestService;
             }
 
-            if (_connectionService != null && _subscribedConnectionService != _connectionService)
-            {
-                UnsubscribeFromConnectionEvents();
-
-                _connectionService.StatusChanged += OnConnectionStatusChanged;
-                _subscribedConnectionService = _connectionService;
-            }
-
             if (_sessionManager != null && _subscribedSessionManager != _sessionManager)
             {
                 UnsubscribeFromSessionEvents();
 
+                _sessionManager.StatusChanged += OnSessionStatusChanged;
                 _sessionManager.StateChanged += OnSessionStateChanged;
                 _sessionManager.SessionReady += OnSessionReady;
                 _sessionManager.SessionFailed += OnSessionFailed;
@@ -115,7 +104,6 @@ namespace WDCableWUI.UI.SpeedTest
         private void UnsubscribeFromServiceEvents()
         {
             UnsubscribeFromSpeedTestEvents();
-            UnsubscribeFromConnectionEvents();
             UnsubscribeFromSessionEvents();
         }
 
@@ -134,17 +122,6 @@ namespace WDCableWUI.UI.SpeedTest
             _subscribedSpeedTestService = null;
         }
 
-        private void UnsubscribeFromConnectionEvents()
-        {
-            if (_subscribedConnectionService == null)
-            {
-                return;
-            }
-
-            _subscribedConnectionService.StatusChanged -= OnConnectionStatusChanged;
-            _subscribedConnectionService = null;
-        }
-
         private void UnsubscribeFromSessionEvents()
         {
             if (_subscribedSessionManager == null)
@@ -152,6 +129,7 @@ namespace WDCableWUI.UI.SpeedTest
                 return;
             }
 
+            _subscribedSessionManager.StatusChanged -= OnSessionStatusChanged;
             _subscribedSessionManager.StateChanged -= OnSessionStateChanged;
             _subscribedSessionManager.SessionReady -= OnSessionReady;
             _subscribedSessionManager.SessionFailed -= OnSessionFailed;
@@ -245,7 +223,7 @@ namespace WDCableWUI.UI.SpeedTest
             });
         }
 
-        private void OnConnectionStatusChanged(object? sender, string status)
+        private void OnSessionStatusChanged(object? sender, string status)
         {
             _dispatcherQueue.TryEnqueue(() =>
             {

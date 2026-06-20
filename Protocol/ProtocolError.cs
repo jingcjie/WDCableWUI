@@ -5,6 +5,7 @@ public enum ProtocolError
     PartialRead,
     MalformedMagic,
     UnsupportedVersion,
+    ProtocolMismatch,
     InvalidHeaderSize,
     InvalidFrameType,
     InvalidChannel,
