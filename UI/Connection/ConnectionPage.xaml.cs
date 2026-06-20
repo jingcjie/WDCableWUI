@@ -231,7 +231,7 @@ namespace WDCableWUI.UI.Connection
 
             try
             {
-                await (_wifiDirectService?.DisconnectAsync() ?? Task.CompletedTask);
+                await (_wifiDirectService?.DisconnectAsync("device_button_disconnect") ?? Task.CompletedTask);
             }
             catch (Exception ex)
             {
@@ -245,7 +245,7 @@ namespace WDCableWUI.UI.Connection
 
             try
             {
-                await (_wifiDirectService?.DisconnectAsync() ?? Task.CompletedTask);
+                await (_wifiDirectService?.DisconnectAsync("connection_page_disconnect") ?? Task.CompletedTask);
             }
             catch (Exception ex)
             {

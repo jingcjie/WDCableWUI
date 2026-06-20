@@ -3,8 +3,6 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Linq;
-using System.Net;
-using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.UI.Dispatching;
@@ -130,11 +128,6 @@ namespace WDCableWUI.Services
         public event EventHandler<string>? ErrorOccurred;
         public event EventHandler<ConnectionRequestEventArgs>? ConnectionRequested;
 
-        public Task<bool> StartAdvertisingAsync(string deviceName = DefaultDeviceName)
-        {
-            return EnsureDiscoverableAsync("legacy_start_advertising", deviceName);
-        }
-
         public async Task<bool> EnsureDiscoverableAsync(string reason, string deviceName = DefaultDeviceName)
         {
             ThrowIfDisposed();
@@ -223,24 +216,6 @@ namespace WDCableWUI.Services
             }
         }
 
-        public void StopAdvertising()
-        {
-            StopAdvertising("legacy_stop_advertising");
-        }
-
-        public void StopAdvertising(string reason)
-        {
-            var opId = NextOperationId();
-            CleanupAdvertisingResources(opId, reason);
-            RefreshOperationalState(opId, reason);
-            OnStatusChanged(
-                "Advertising stopped. Device is no longer discoverable",
-                opId,
-                api: "WiFiDirectAdvertisementPublisher.Stop",
-                result: "stopped",
-                reason: reason);
-        }
-
         public async Task StopInfrastructureAsync(string reason)
         {
             ThrowIfDisposed();
@@ -258,11 +233,6 @@ namespace WDCableWUI.Services
                 api: "WiFiDirectService.StopInfrastructureAsync",
                 result: "stopped",
                 reason: reason);
-        }
-
-        public Task<bool> StartScanningAsync()
-        {
-            return StartScanAsync("legacy_start_scan");
         }
 
         public async Task<bool> StartScanAsync(string reason)
@@ -346,11 +316,6 @@ namespace WDCableWUI.Services
                     reason: reason);
                 return false;
             }
-        }
-
-        public void StopScanning()
-        {
-            _ = StopScanAsync("legacy_stop_scan", clearDevices: true);
         }
 
         public Task StopScanAsync(string reason)
@@ -497,11 +462,6 @@ namespace WDCableWUI.Services
             {
                 _connectionLock.Release();
             }
-        }
-
-        public Task DisconnectAsync()
-        {
-            return DisconnectAsync("legacy_disconnect");
         }
 
         public async Task DisconnectAsync(string reason)

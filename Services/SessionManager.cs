@@ -570,11 +570,6 @@ public sealed class SessionManager : IDisposable
             CloseTransports(openedTransports.Values);
             await FailSessionAsync(expectedGeneration, link, ex.Reason, ex, ex.IsPeerProtocolMissing).ConfigureAwait(false);
         }
-        catch (PeerProtocolMissingException ex)
-        {
-            CloseTransports(openedTransports.Values);
-            await FailSessionAsync(expectedGeneration, link, "protocol_mismatch", ex, isPeerProtocolMissing: true).ConfigureAwait(false);
-        }
         catch (ProtocolException ex)
         {
             CloseTransports(openedTransports.Values);
@@ -816,10 +811,16 @@ public sealed class SessionManager : IDisposable
             {
                 await runtime.ControlTransport.WriteFrameAsync(BuildHandshakeHello(runtime), timeoutCts.Token).ConfigureAwait(false);
                 var ack = await runtime.ControlTransport.ReadFrameAsync(timeoutCts.Token).ConfigureAwait(false)
-                    ?? throw new PeerProtocolMissingException("Peer closed before handshake ack");
+                    ?? throw new SessionSetupException(
+                        "protocol_mismatch",
+                        "Peer closed before handshake ack",
+                        isPeerProtocolMissing: true);
                 if (ack.Type != ProtocolFrameType.HandshakeAck)
                 {
-                    throw new PeerProtocolMissingException($"Expected handshake ack, received {ack.Type.GetProtocolName()}");
+                    throw new SessionSetupException(
+                        "protocol_mismatch",
+                        $"Expected handshake ack, received {ack.Type.GetProtocolName()}",
+                        isPeerProtocolMissing: true);
                 }
 
                 runtime.SetPeerCapabilities(SessionHandshakeMetadata.ValidateAck(
@@ -830,10 +831,16 @@ public sealed class SessionManager : IDisposable
             else
             {
                 var hello = await runtime.ControlTransport.ReadFrameAsync(timeoutCts.Token).ConfigureAwait(false)
-                    ?? throw new PeerProtocolMissingException("Peer closed before handshake hello");
+                    ?? throw new SessionSetupException(
+                        "protocol_mismatch",
+                        "Peer closed before handshake hello",
+                        isPeerProtocolMissing: true);
                 if (hello.Type != ProtocolFrameType.HandshakeHello)
                 {
-                    throw new PeerProtocolMissingException($"Expected handshake hello, received {hello.Type.GetProtocolName()}");
+                    throw new SessionSetupException(
+                        "protocol_mismatch",
+                        $"Expected handshake hello, received {hello.Type.GetProtocolName()}",
+                        isPeerProtocolMissing: true);
                 }
 
                 runtime.SetPeerCapabilities(SessionHandshakeMetadata.ValidateHello(
