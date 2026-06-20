@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using System.Xml.Linq;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace WDCableWUI.Tests;
@@ -16,6 +17,21 @@ public sealed class ResourceCoverageTests
 
         CollectionAssert.IsSubsetOf(uids.ToList(), englishRoots.ToList(), "Missing English resources for one or more x:Uid roots.");
         CollectionAssert.IsSubsetOf(uids.ToList(), chineseRoots.ToList(), "Missing Chinese resources for one or more x:Uid roots.");
+    }
+
+    [TestMethod]
+    public void PackageAllowsInboundTrafficOnPublicNetworks()
+    {
+        var root = FindRepositoryRoot();
+        var document = XDocument.Load(Path.Combine(root, "Package.appxmanifest"));
+        XNamespace foundation = "http://schemas.microsoft.com/appx/manifest/foundation/windows10";
+        var capabilities = document
+            .Descendants(foundation + "Capability")
+            .Select(element => element.Attribute("Name")?.Value)
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .ToList();
+
+        CollectionAssert.Contains(capabilities, "internetClientServer");
     }
 
     private static string FindRepositoryRoot()

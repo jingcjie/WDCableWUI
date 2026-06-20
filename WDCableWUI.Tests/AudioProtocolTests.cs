@@ -1,4 +1,5 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using System.Text;
 using System.Text.Json;
 using WDCableWUI.Protocol;
 using WDCableWUI.Services;
@@ -187,6 +188,108 @@ public sealed class AudioProtocolTests
     }
 
     [TestMethod]
+    public void ProbePayloadsUseCanonicalAndroidWireFormat()
+    {
+        Assert.AreEqual("WDA2RTP", Encoding.ASCII.GetString(AudioProtocol.RtpProbePayload));
+        Assert.AreEqual("WDA2RTCP", Encoding.ASCII.GetString(AudioProtocol.RtcpProbePayload));
+        Assert.IsTrue(AudioProtocol.IsRtpProbePayload(AudioProtocol.RtpProbePayload));
+        Assert.IsTrue(AudioProtocol.IsRtcpProbePayload(AudioProtocol.RtcpProbePayload));
+        Assert.IsFalse(AudioProtocol.IsRtpProbePayload("WDA2RTPX"u8));
+        Assert.IsFalse(AudioProtocol.IsRtcpProbePayload("WDCABLE-AUDIO-RTCP-PROBE"u8));
+    }
+
+    [TestMethod]
+    public void OfferSourcesAcceptMicrophoneAndSystemAudioOnly()
+    {
+        var microphone = OfferMetadata(AudioProtocol.QualityStandard, AudioProtocol.BitrateStandardBps);
+        microphone = WithSource(microphone, AudioProtocol.SourceMicrophone);
+        var systemAudio = OfferMetadata(AudioProtocol.QualityStandard, AudioProtocol.BitrateStandardBps);
+        var unknown = WithSource(systemAudio, "lineIn");
+
+        Assert.IsTrue(AudioProtocol.IsCompatibleOffer(AudioProtocol.ParseOffer(microphone)));
+        Assert.IsTrue(AudioProtocol.IsCompatibleOffer(AudioProtocol.ParseOffer(systemAudio)));
+        Assert.IsFalse(AudioProtocol.IsCompatibleOffer(AudioProtocol.ParseOffer(unknown)));
+    }
+
+    [TestMethod]
+    public void AndroidParsesCanonicalWindowsSystemAudioOfferFixture()
+    {
+        const string json = """
+            {
+              "kind": "audio.offer",
+              "streamId": 42,
+              "offerId": "windows-system-audio",
+              "transport": "rtp-udp",
+              "source": "systemAudio",
+              "codec": "opus",
+              "codecImpl": "libopus",
+              "sampleRate": 48000,
+              "channels": 1,
+              "frameDurationMs": 20,
+              "latencyMode": "lowLatency",
+              "qualityMode": "standard",
+              "bitrateBps": 32000,
+              "rtpPayloadType": 111,
+              "rtpClockRate": 48000,
+              "rtpSsrc": 16909060,
+              "transportRole": "listener"
+            }
+            """;
+
+        var offer = AudioProtocol.ParseOffer(AudioProtocol.ParseMetadata(json));
+
+        Assert.AreEqual(AudioProtocol.SourceSystemAudio, offer.Source);
+        Assert.IsTrue(AudioProtocol.TryValidateOffer(offer, out var reason), reason);
+    }
+
+    [TestMethod]
+    public void OfferValidationReportsExactRejectedField()
+    {
+        var valid = ValidOffer();
+
+        AssertOfferRejected(valid with { Transport = "tcp" }, "transport=tcp");
+        AssertOfferRejected(valid with { Source = "lineIn" }, "source=lineIn");
+        AssertOfferRejected(valid with { Codec = "pcm" }, "codec=pcm");
+        AssertOfferRejected(valid with { CodecImpl = "other" }, "codecImpl=other");
+        AssertOfferRejected(valid with { SampleRate = 44_100 }, "sampleRate=44100");
+        AssertOfferRejected(valid with { Channels = 2 }, "channels=2");
+        AssertOfferRejected(valid with { FrameDurationMs = 10 }, "frameDurationMs=10");
+        AssertOfferRejected(valid with { LatencyMode = "receiverChoice" }, "latencyMode=receiverChoice");
+        AssertOfferRejected(
+            valid with { QualityMode = AudioProtocol.QualityHigh, BitrateBps = AudioProtocol.BitrateStandardBps },
+            "qualityMode=high,bitrateBps=32000");
+        AssertOfferRejected(valid with { RtpPayloadType = 96 }, "rtpPayloadType=96");
+        AssertOfferRejected(valid with { RtpClockRate = 44_100 }, "rtpClockRate=44100");
+    }
+
+    [TestMethod]
+    public void AcceptValidationReportsExactRejectedField()
+    {
+        var valid = ValidAccept();
+
+        AssertAcceptRejected(valid with { Transport = "tcp" }, "transport=tcp");
+        AssertAcceptRejected(valid with { Codec = "pcm" }, "codec=pcm");
+        AssertAcceptRejected(valid with { CodecImpl = "other" }, "codecImpl=other");
+        AssertAcceptRejected(valid with { SampleRate = 44_100 }, "sampleRate=44100");
+        AssertAcceptRejected(valid with { Channels = 2 }, "channels=2");
+        AssertAcceptRejected(valid with { FrameDurationMs = 10 }, "frameDurationMs=10");
+        AssertAcceptRejected(valid with { LatencyMode = "receiverChoice" }, "latencyMode=receiverChoice");
+        AssertAcceptRejected(
+            valid with { QualityMode = AudioProtocol.QualityHigh, BitrateBps = AudioProtocol.BitrateStandardBps },
+            "qualityMode=high,bitrateBps=32000");
+        AssertAcceptRejected(valid with { RtpPayloadType = 96 }, "rtpPayloadType=96");
+        AssertAcceptRejected(valid with { RtpClockRate = 44_100 }, "rtpClockRate=44100");
+    }
+
+    [TestMethod]
+    public void SameNegotiationRequiresMatchingStreamAndOfferIds()
+    {
+        Assert.IsTrue(AudioProtocol.IsSameNegotiation(7, "offer-a", 7, "offer-a"));
+        Assert.IsFalse(AudioProtocol.IsSameNegotiation(7, "offer-a", 8, "offer-a"));
+        Assert.IsFalse(AudioProtocol.IsSameNegotiation(7, "offer-a", 7, "offer-b"));
+    }
+
+    [TestMethod]
     public void StopMetadataCarriesReasonAndStreamId()
     {
         var metadata = AudioProtocol.ParseMetadata(AudioProtocol.Stop(77, "local_stop"));
@@ -253,5 +356,42 @@ public sealed class AudioProtocolTests
         }
 
         return values;
+    }
+
+    private static IReadOnlyDictionary<string, JsonElement> WithSource(
+        IReadOnlyDictionary<string, JsonElement> metadata,
+        string source)
+    {
+        var values = metadata.ToDictionary(
+            pair => pair.Key,
+            pair => (object?)pair.Value);
+        values["source"] = source;
+        return AudioProtocol.ParseMetadata(AudioProtocol.BuildMetadata(values));
+    }
+
+    private static AudioOffer ValidOffer()
+    {
+        return AudioProtocol.ParseOffer(OfferMetadata(
+            AudioProtocol.QualityStandard,
+            AudioProtocol.BitrateStandardBps));
+    }
+
+    private static AudioAccept ValidAccept()
+    {
+        return AudioProtocol.ParseAccept(AcceptMetadata(
+            AudioProtocol.QualityStandard,
+            AudioProtocol.BitrateStandardBps));
+    }
+
+    private static void AssertOfferRejected(AudioOffer offer, string expectedReason)
+    {
+        Assert.IsFalse(AudioProtocol.TryValidateOffer(offer, out var reason));
+        StringAssert.Contains(reason, expectedReason);
+    }
+
+    private static void AssertAcceptRejected(AudioAccept accept, string expectedReason)
+    {
+        Assert.IsFalse(AudioProtocol.TryValidateAccept(accept, out var reason));
+        StringAssert.Contains(reason, expectedReason);
     }
 }

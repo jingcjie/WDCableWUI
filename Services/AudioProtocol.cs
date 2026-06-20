@@ -70,8 +70,8 @@ public static class AudioProtocol
             [QualityNearLossless] = BitrateNearLosslessBps
         };
 
-    public static readonly byte[] RtpProbePayload = "WDCABLE-AUDIO-RTP-PROBE"u8.ToArray();
-    public static readonly byte[] RtcpProbePayload = "WDCABLE-AUDIO-RTCP-PROBE"u8.ToArray();
+    public static readonly byte[] RtpProbePayload = "WDA2RTP"u8.ToArray();
+    public static readonly byte[] RtcpProbePayload = "WDA2RTCP"u8.ToArray();
 
     public static bool PeerSupportsAudio(IReadOnlyList<string> capabilities)
     {
@@ -287,30 +287,175 @@ public static class AudioProtocol
 
     public static bool IsCompatibleOffer(AudioOffer offer)
     {
-        return offer.Transport == TransportRtpUdp &&
-               offer.Codec == CodecOpus &&
-               offer.CodecImpl == CodecImplLibOpus &&
-               offer.SampleRate == SampleRate &&
-               offer.Channels == Channels &&
-               offer.FrameDurationMs == FrameDurationMs &&
-               IsSupportedLatencyMode(offer.LatencyMode) &&
-               IsSupportedQualityBitratePair(offer.QualityMode, offer.BitrateBps) &&
-               offer.RtpPayloadType == RtpPayloadType &&
-               offer.RtpClockRate == RtpClockRate;
+        return TryValidateOffer(offer, out _);
     }
 
     public static bool IsCompatibleAccept(AudioAccept accept)
     {
-        return accept.Transport == TransportRtpUdp &&
-               accept.Codec == CodecOpus &&
-               accept.CodecImpl == CodecImplLibOpus &&
-               accept.SampleRate == SampleRate &&
-               accept.Channels == Channels &&
-               accept.FrameDurationMs == FrameDurationMs &&
-               IsSupportedLatencyMode(accept.LatencyMode) &&
-               IsSupportedQualityBitratePair(accept.QualityMode, accept.BitrateBps) &&
-               accept.RtpPayloadType == RtpPayloadType &&
-               accept.RtpClockRate == RtpClockRate;
+        return TryValidateAccept(accept, out _);
+    }
+
+    public static bool TryValidateOffer(AudioOffer offer, out string reason)
+    {
+        if (offer.Transport != TransportRtpUdp)
+        {
+            reason = $"transport={offer.Transport}; expected={TransportRtpUdp}";
+            return false;
+        }
+
+        if (!IsSupportedSource(offer.Source))
+        {
+            reason = $"source={offer.Source}; supported={SourceMicrophone},{SourceSystemAudio}";
+            return false;
+        }
+
+        if (offer.Codec != CodecOpus)
+        {
+            reason = $"codec={offer.Codec}; expected={CodecOpus}";
+            return false;
+        }
+
+        if (offer.CodecImpl != CodecImplLibOpus)
+        {
+            reason = $"codecImpl={offer.CodecImpl}; expected={CodecImplLibOpus}";
+            return false;
+        }
+
+        if (offer.SampleRate != SampleRate)
+        {
+            reason = $"sampleRate={offer.SampleRate}; expected={SampleRate}";
+            return false;
+        }
+
+        if (offer.Channels != Channels)
+        {
+            reason = $"channels={offer.Channels}; expected={Channels}";
+            return false;
+        }
+
+        if (offer.FrameDurationMs != FrameDurationMs)
+        {
+            reason = $"frameDurationMs={offer.FrameDurationMs}; expected={FrameDurationMs}";
+            return false;
+        }
+
+        if (!IsSupportedLatencyMode(offer.LatencyMode))
+        {
+            reason = $"latencyMode={offer.LatencyMode}; supported={LatencyModeLow},{LatencyModeStable}";
+            return false;
+        }
+
+        if (!IsSupportedQualityBitratePair(offer.QualityMode, offer.BitrateBps))
+        {
+            reason = $"qualityMode={offer.QualityMode},bitrateBps={offer.BitrateBps}; expected a supported quality/bitrate pair";
+            return false;
+        }
+
+        if (offer.RtpPayloadType != RtpPayloadType)
+        {
+            reason = $"rtpPayloadType={offer.RtpPayloadType}; expected={RtpPayloadType}";
+            return false;
+        }
+
+        if (offer.RtpClockRate != RtpClockRate)
+        {
+            reason = $"rtpClockRate={offer.RtpClockRate}; expected={RtpClockRate}";
+            return false;
+        }
+
+        reason = "";
+        return true;
+    }
+
+    public static bool TryValidateAccept(AudioAccept accept, out string reason)
+    {
+        if (accept.Transport != TransportRtpUdp)
+        {
+            reason = $"transport={accept.Transport}; expected={TransportRtpUdp}";
+            return false;
+        }
+
+        if (accept.Codec != CodecOpus)
+        {
+            reason = $"codec={accept.Codec}; expected={CodecOpus}";
+            return false;
+        }
+
+        if (accept.CodecImpl != CodecImplLibOpus)
+        {
+            reason = $"codecImpl={accept.CodecImpl}; expected={CodecImplLibOpus}";
+            return false;
+        }
+
+        if (accept.SampleRate != SampleRate)
+        {
+            reason = $"sampleRate={accept.SampleRate}; expected={SampleRate}";
+            return false;
+        }
+
+        if (accept.Channels != Channels)
+        {
+            reason = $"channels={accept.Channels}; expected={Channels}";
+            return false;
+        }
+
+        if (accept.FrameDurationMs != FrameDurationMs)
+        {
+            reason = $"frameDurationMs={accept.FrameDurationMs}; expected={FrameDurationMs}";
+            return false;
+        }
+
+        if (!IsSupportedLatencyMode(accept.LatencyMode))
+        {
+            reason = $"latencyMode={accept.LatencyMode}; supported={LatencyModeLow},{LatencyModeStable}";
+            return false;
+        }
+
+        if (!IsSupportedQualityBitratePair(accept.QualityMode, accept.BitrateBps))
+        {
+            reason = $"qualityMode={accept.QualityMode},bitrateBps={accept.BitrateBps}; expected a supported quality/bitrate pair";
+            return false;
+        }
+
+        if (accept.RtpPayloadType != RtpPayloadType)
+        {
+            reason = $"rtpPayloadType={accept.RtpPayloadType}; expected={RtpPayloadType}";
+            return false;
+        }
+
+        if (accept.RtpClockRate != RtpClockRate)
+        {
+            reason = $"rtpClockRate={accept.RtpClockRate}; expected={RtpClockRate}";
+            return false;
+        }
+
+        reason = "";
+        return true;
+    }
+
+    public static bool IsSupportedSource(string source)
+    {
+        return source is SourceMicrophone or SourceSystemAudio;
+    }
+
+    public static bool IsRtpProbePayload(ReadOnlySpan<byte> payload)
+    {
+        return payload.SequenceEqual(RtpProbePayload);
+    }
+
+    public static bool IsRtcpProbePayload(ReadOnlySpan<byte> payload)
+    {
+        return payload.SequenceEqual(RtcpProbePayload);
+    }
+
+    public static bool IsSameNegotiation(
+        long currentStreamId,
+        string currentOfferId,
+        long incomingStreamId,
+        string incomingOfferId)
+    {
+        return currentStreamId == incomingStreamId &&
+               string.Equals(currentOfferId, incomingOfferId, StringComparison.Ordinal);
     }
 
     public static string NormalizeLatencyMode(string? value)

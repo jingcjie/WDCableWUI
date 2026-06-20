@@ -241,17 +241,20 @@
                             <TextBlock Grid.Row="10" Text="Late drops" Style="{StaticResource CaptionTextBlockStyle}"/>
                             <TextBlock x:Name="LateDropsText" Grid.Row="10" Grid.Column="1" Text="0" Style="{StaticResource BodyStrongTextBlockStyle}"/>
 
-                            <TextBlock Grid.Row="11" Text="PLC" Style="{StaticResource CaptionTextBlockStyle}"/>
-                            <TextBlock x:Name="PlcText" Grid.Row="11" Grid.Column="1" Text="0" Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                            <TextBlock Grid.Row="11" x:Uid="Audio_Stats_OverflowDrops" Style="{StaticResource CaptionTextBlockStyle}"/>
+                            <TextBlock x:Name="OverflowDropsText" Grid.Row="11" Grid.Column="1" Text="0" Style="{StaticResource BodyStrongTextBlockStyle}"/>
 
-                            <TextBlock Grid.Row="12" Text="RTCP loss" Style="{StaticResource CaptionTextBlockStyle}"/>
-                            <TextBlock x:Name="RtcpLossText" Grid.Row="12" Grid.Column="1" Text="0%" Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                            <TextBlock Grid.Row="12" Text="PLC" Style="{StaticResource CaptionTextBlockStyle}"/>
+                            <TextBlock x:Name="PlcText" Grid.Row="12" Grid.Column="1" Text="0" Style="{StaticResource BodyStrongTextBlockStyle}"/>
 
-                            <TextBlock Grid.Row="13" Text="RTCP jitter" Style="{StaticResource CaptionTextBlockStyle}"/>
-                            <TextBlock x:Name="RtcpJitterText" Grid.Row="13" Grid.Column="1" Text="0 ms" Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                            <TextBlock Grid.Row="13" Text="RTCP loss" Style="{StaticResource CaptionTextBlockStyle}"/>
+                            <TextBlock x:Name="RtcpLossText" Grid.Row="13" Grid.Column="1" Text="0%" Style="{StaticResource BodyStrongTextBlockStyle}"/>
 
-                            <TextBlock Grid.Row="14" Text="RTT" Style="{StaticResource CaptionTextBlockStyle}"/>
-                            <TextBlock x:Name="RttText" Grid.Row="14" Grid.Column="1" Text="-" Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                            <TextBlock Grid.Row="14" Text="RTCP jitter" Style="{StaticResource CaptionTextBlockStyle}"/>
+                            <TextBlock x:Name="RtcpJitterText" Grid.Row="14" Grid.Column="1" Text="0 ms" Style="{StaticResource BodyStrongTextBlockStyle}"/>
+
+                            <TextBlock Grid.Row="15" Text="RTT" Style="{StaticResource CaptionTextBlockStyle}"/>
+                            <TextBlock x:Name="RttText" Grid.Row="15" Grid.Column="1" Text="-" Style="{StaticResource BodyStrongTextBlockStyle}"/>
                         </Grid>
                     </StackPanel>
                 </Border>

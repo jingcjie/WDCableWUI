@@ -394,16 +394,25 @@ public sealed class AudioService : IDisposable
             return;
         }
 
+        if (_mode == ModeReceive &&
+            _state is StateConnecting or StateStreaming &&
+            AudioProtocol.IsSameNegotiation(_streamId, _offerId, offer.StreamId, offer.OfferId))
+        {
+            TraceAudio($"Duplicate offer ignored: streamId={offer.StreamId} offerId={offer.OfferId}");
+            return;
+        }
+
         if (_state != StateReceiveReady || _mode != ModeReceive)
         {
             await SendAudioErrorAsync(offer.StreamId, AudioProtocol.ErrorReceiverNotReady, "Receiver has not started Audio Link receive mode.").ConfigureAwait(false);
             return;
         }
 
-        if (!AudioProtocol.IsCompatibleOffer(offer))
+        if (!AudioProtocol.TryValidateOffer(offer, out var offerRejectionReason))
         {
-            TraceAudio($"Offer rejected: latency={offer.LatencyMode} quality={offer.QualityMode} bitrateBps={offer.BitrateBps}");
-            await SendAudioErrorAsync(offer.StreamId, AudioProtocol.ErrorRtpUnsupported, "Unsupported RTP/libopus audio offer.").ConfigureAwait(false);
+            var message = $"Unsupported RTP/libopus audio offer: {offerRejectionReason}";
+            TraceAudio($"Offer rejected: {offerRejectionReason}");
+            await SendAudioErrorAsync(offer.StreamId, AudioProtocol.ErrorRtpUnsupported, message).ConfigureAwait(false);
             return;
         }
 
@@ -442,7 +451,7 @@ public sealed class AudioService : IDisposable
 
             if (sessionInfo.TransportRole == SessionTransportRole.Connector)
             {
-                _ = RunProbeLoopAsync(streamToken);
+                _ = RunProbeLoopAsync(sessionInfo, streamToken);
             }
 
             EmitState("Audio offer accepted");
@@ -475,10 +484,17 @@ public sealed class AudioService : IDisposable
             return;
         }
 
-        if (!AudioProtocol.IsCompatibleAccept(accept))
+        if (_state is StateConnecting or StateStreaming)
         {
-            TraceAudio($"Accept rejected: latency={accept.LatencyMode} quality={accept.QualityMode} bitrateBps={accept.BitrateBps}");
-            await FailAudioAsync(AudioProtocol.ErrorRtpUnsupported, "Peer accepted unsupported RTP/libopus audio details.", accept.StreamId).ConfigureAwait(false);
+            TraceAudio($"Duplicate accept ignored: streamId={accept.StreamId} offerId={accept.OfferId}");
+            return;
+        }
+
+        if (!AudioProtocol.TryValidateAccept(accept, out var acceptRejectionReason))
+        {
+            var message = $"Peer accepted unsupported RTP/libopus audio details: {acceptRejectionReason}";
+            TraceAudio($"Accept rejected: {acceptRejectionReason}");
+            await FailAudioAsync(AudioProtocol.ErrorRtpUnsupported, message, accept.StreamId).ConfigureAwait(false);
             return;
         }
 
@@ -487,7 +503,12 @@ public sealed class AudioService : IDisposable
             accept.BitrateBps != _configuredBitrateBps)
         {
             TraceAudio($"Accept changed stream config: offered latency={_latencyMode} quality={_qualityMode} bitrateBps={_configuredBitrateBps}; accepted latency={accept.LatencyMode} quality={accept.QualityMode} bitrateBps={accept.BitrateBps}");
-            await FailAudioAsync(AudioProtocol.ErrorRtpUnsupported, "Peer accepted a different RTP/libopus stream configuration.", accept.StreamId).ConfigureAwait(false);
+            await FailAudioAsync(
+                AudioProtocol.ErrorRtpUnsupported,
+                $"Peer accepted a different RTP/libopus stream configuration: " +
+                $"offered latencyMode={_latencyMode},qualityMode={_qualityMode},bitrateBps={_configuredBitrateBps}; " +
+                $"accepted latencyMode={accept.LatencyMode},qualityMode={accept.QualityMode},bitrateBps={accept.BitrateBps}",
+                accept.StreamId).ConfigureAwait(false);
             return;
         }
 
@@ -507,7 +528,7 @@ public sealed class AudioService : IDisposable
             TryStartCaptureIfReady(streamToken);
             if (sessionInfo.TransportRole == SessionTransportRole.Listener && accept.ReceiverProbeRequired)
             {
-                _ = RunProbeTimeoutAsync(accept.StreamId, streamToken);
+                _ = RunProbeTimeoutAsync(accept.StreamId, sessionInfo, streamToken);
             }
 
             EmitState("Audio offer accepted by peer");
@@ -559,10 +580,64 @@ public sealed class AudioService : IDisposable
         await Task.CompletedTask.ConfigureAwait(false);
     }
 
-    private async Task RunProbeLoopAsync(CancellationToken cancellationToken)
+    private async Task RunProbeLoopAsync(AudioSessionInfo sessionInfo, CancellationToken cancellationToken)
     {
-        for (var attempt = 0; attempt < 25 && !cancellationToken.IsCancellationRequested; attempt++)
+        try
         {
+            for (var attempt = 0; attempt < 25 && !cancellationToken.IsCancellationRequested; attempt++)
+            {
+                UdpClient? rtpClient;
+                UdpClient? rtcpClient;
+                IPEndPoint? rtpDestination;
+                IPEndPoint? rtcpDestination;
+                lock (_udpLock)
+                {
+                    rtpClient = _rtpClient;
+                    rtcpClient = _rtcpClient;
+                    rtpDestination = _rtpDestination;
+                    rtcpDestination = _rtcpDestination;
+                }
+
+                if (rtpClient == null || rtcpClient == null || rtpDestination == null || rtcpDestination == null)
+                {
+                    return;
+                }
+
+                await SendProbeDatagramAsync(
+                    "RTP",
+                    rtpClient,
+                    AudioProtocol.RtpProbePayload,
+                    rtpDestination,
+                    sessionInfo,
+                    cancellationToken).ConfigureAwait(false);
+                await SendProbeDatagramAsync(
+                    "RTCP",
+                    rtcpClient,
+                    AudioProtocol.RtcpProbePayload,
+                    rtcpDestination,
+                    sessionInfo,
+                    cancellationToken).ConfigureAwait(false);
+                await Task.Delay(ProbeInterval, cancellationToken).ConfigureAwait(false);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private async Task RunProbeTimeoutAsync(
+        long streamId,
+        AudioSessionInfo sessionInfo,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await Task.Delay(ProbeTimeout, cancellationToken).ConfigureAwait(false);
+            if (cancellationToken.IsCancellationRequested || !_isSender || _state == StateStreaming)
+            {
+                return;
+            }
+
             UdpClient? rtpClient;
             UdpClient? rtcpClient;
             IPEndPoint? rtpDestination;
@@ -575,36 +650,17 @@ public sealed class AudioService : IDisposable
                 rtcpDestination = _rtcpDestination;
             }
 
-            if (rtpClient == null || rtcpClient == null || rtpDestination == null || rtcpDestination == null)
+            if (rtpDestination == null || rtcpDestination == null)
             {
-                return;
-            }
-
-            await SendUdpAsync(rtpClient, AudioProtocol.RtpProbePayload, rtpDestination, cancellationToken).ConfigureAwait(false);
-            await SendUdpAsync(rtcpClient, AudioProtocol.RtcpProbePayload, rtcpDestination, cancellationToken).ConfigureAwait(false);
-            await Task.Delay(ProbeInterval, cancellationToken).ConfigureAwait(false);
-        }
-    }
-
-    private async Task RunProbeTimeoutAsync(long streamId, CancellationToken cancellationToken)
-    {
-        try
-        {
-            await Task.Delay(ProbeTimeout, cancellationToken).ConfigureAwait(false);
-            if (cancellationToken.IsCancellationRequested || !_isSender || _state == StateStreaming)
-            {
-                return;
-            }
-
-            IPEndPoint? rtpDestination;
-            lock (_udpLock)
-            {
-                rtpDestination = _rtpDestination;
-            }
-
-            if (rtpDestination == null)
-            {
-                await FailAudioAsync(AudioProtocol.ErrorRtpProbeTimeout, "Timed out waiting for receiver UDP path probe.", streamId).ConfigureAwait(false);
+                var details =
+                    $"role={sessionInfo.TransportRole.GetEventName()} " +
+                    $"rtpLocal={DescribeLocalEndpoint(rtpClient)} rtpDestination={rtpDestination?.ToString() ?? "unknown"} " +
+                    $"rtcpLocal={DescribeLocalEndpoint(rtcpClient)} rtcpDestination={rtcpDestination?.ToString() ?? "unknown"} " +
+                    "socketError=no_probe_received";
+                await FailAudioAsync(
+                    AudioProtocol.ErrorRtpProbeTimeout,
+                    $"Timed out waiting for receiver UDP path probe. {details}",
+                    streamId).ConfigureAwait(false);
             }
         }
         catch (OperationCanceledException)
@@ -619,7 +675,7 @@ public sealed class AudioService : IDisposable
             while (!cancellationToken.IsCancellationRequested)
             {
                 var result = await client.ReceiveAsync(cancellationToken).ConfigureAwait(false);
-                if (result.Buffer.AsSpan().SequenceEqual(AudioProtocol.RtpProbePayload))
+                if (AudioProtocol.IsRtpProbePayload(result.Buffer))
                 {
                     HandlePathProbe(isRtp: true, result.RemoteEndPoint);
                     continue;
@@ -670,7 +726,7 @@ public sealed class AudioService : IDisposable
             while (!cancellationToken.IsCancellationRequested)
             {
                 var result = await client.ReceiveAsync(cancellationToken).ConfigureAwait(false);
-                if (result.Buffer.AsSpan().SequenceEqual(AudioProtocol.RtcpProbePayload))
+                if (AudioProtocol.IsRtcpProbePayload(result.Buffer))
                 {
                     HandlePathProbe(isRtp: false, result.RemoteEndPoint);
                     continue;
@@ -756,12 +812,14 @@ public sealed class AudioService : IDisposable
         }
 
         IPEndPoint? rtpDestination;
+        IPEndPoint? rtcpDestination;
         lock (_udpLock)
         {
             rtpDestination = _rtpDestination;
+            rtcpDestination = _rtcpDestination;
         }
 
-        if (rtpDestination == null)
+        if (rtpDestination == null || rtcpDestination == null)
         {
             return;
         }
@@ -926,22 +984,26 @@ public sealed class AudioService : IDisposable
 
             while (!cancellationToken.IsCancellationRequested)
             {
-                if (!_jitterBuffer.TryReadNext(out var read))
+                var poll = _jitterBuffer.PollForPlayback();
+                if (poll is JitterBufferPollResult.Wait wait)
                 {
-                    await Task.Delay(5, cancellationToken).ConfigureAwait(false);
+                    await Task.Delay(
+                        TimeSpan.FromMilliseconds(
+                            Math.Clamp(wait.WaitMs, 1, AudioProtocol.FrameDurationMs)),
+                        cancellationToken).ConfigureAwait(false);
                     continue;
                 }
 
                 short[] pcm;
-                if (read.IsMissing || read.Payload == null)
+                if (poll is JitterBufferPollResult.Missing)
                 {
                     pcm = decoder.DecodeMissing();
                 }
-                else
+                else if (poll is JitterBufferPollResult.Packet packet)
                 {
                     try
                     {
-                        pcm = decoder.Decode(read.Payload);
+                        pcm = decoder.Decode(packet.Frame.Payload);
                     }
                     catch
                     {
@@ -950,10 +1012,13 @@ public sealed class AudioService : IDisposable
                         pcm = new short[AudioProtocol.SamplesPerFrame];
                     }
                 }
+                else
+                {
+                    continue;
+                }
 
                 var bytes = AudioSampleConverter.Pcm16ToBytes(pcm, AudioProtocol.SamplesPerFrame);
                 provider.AddSamples(bytes, 0, bytes.Length);
-                await Task.Delay(AudioProtocol.FrameDurationMs, cancellationToken).ConfigureAwait(false);
             }
         }
         catch (OperationCanceledException)
@@ -1120,6 +1185,7 @@ public sealed class AudioService : IDisposable
                     _configuredBitrateBps,
                     snapshot.SequenceGaps,
                     snapshot.LatePacketDrops,
+                    snapshot.OverflowDrops,
                     snapshot.DuplicateOrReorderedPackets,
                     snapshot.PlcCount + Interlocked.Read(ref _playbackSilenceFillCount),
                     fractionLost,
@@ -1159,6 +1225,35 @@ public sealed class AudioService : IDisposable
             {
                 await FailAudioAsync(AudioProtocol.ErrorRtpSendFailed, $"Audio UDP send failed: {ex.Message}", Interlocked.Read(ref _streamId)).ConfigureAwait(false);
             }
+        }
+    }
+
+    private async Task SendProbeDatagramAsync(
+        string probeName,
+        UdpClient client,
+        byte[] payload,
+        IPEndPoint destination,
+        AudioSessionInfo sessionInfo,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await client.SendAsync(payload, payload.Length, destination)
+                .WaitAsync(cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            Interlocked.Increment(ref _udpSendErrors);
+            TraceAudio(
+                $"{probeName} probe send failed: " +
+                $"role={sessionInfo.TransportRole.GetEventName()} " +
+                $"local={DescribeLocalEndpoint(client)} destination={destination} " +
+                $"socketError={DescribeSocketError(ex)}");
         }
     }
 
@@ -1243,8 +1338,8 @@ public sealed class AudioService : IDisposable
     private async Task FailAudioAsync(string code, string message, long streamId)
     {
         await SendAudioErrorAsync(streamId, code, message).ConfigureAwait(false);
-        EmitAudioError(code, message, streamId);
         CleanupLocal("failed", emitStopped: true);
+        EmitAudioError(code, message, streamId);
     }
 
     private async Task EmitLocalStartErrorAsync(string code, string message)
@@ -1273,8 +1368,8 @@ public sealed class AudioService : IDisposable
 
         var message = AudioProtocol.OptionalString(metadata, "message", "Peer reported audio error.");
         var streamId = AudioProtocol.OptionalInt64(metadata, "streamId", fallbackStreamId);
-        EmitAudioError(code, message, streamId);
         CleanupLocal("peer_error", emitStopped: true);
+        EmitAudioError(code, message, streamId);
     }
 
     private AudioSessionInfo RequireAudioSession()
@@ -1412,6 +1507,25 @@ public sealed class AudioService : IDisposable
         return IPAddress.TryParse(address, out var parsed)
             ? parsed
             : throw new InvalidOperationException("Peer audio address is unavailable.");
+    }
+
+    private static string DescribeLocalEndpoint(UdpClient? client)
+    {
+        try
+        {
+            return client?.Client.LocalEndPoint?.ToString() ?? "unknown";
+        }
+        catch
+        {
+            return "closed";
+        }
+    }
+
+    private static string DescribeSocketError(Exception exception)
+    {
+        return exception is SocketException socketException
+            ? $"{socketException.SocketErrorCode}: {socketException.Message}"
+            : $"{exception.GetType().Name}: {exception.Message}";
     }
 
     private static bool CanCreateLoopbackCapture(out string error)
@@ -1597,6 +1711,7 @@ public sealed class AudioStatsEventArgs : EventArgs
         int configuredBitrateBps,
         long packetLossCount,
         long latePacketDrops,
+        long overflowDrops,
         long duplicateOrReorderedPackets,
         long plcCount,
         byte rtcpFractionLost,
@@ -1622,6 +1737,7 @@ public sealed class AudioStatsEventArgs : EventArgs
         ConfiguredBitrateBps = configuredBitrateBps;
         PacketLossCount = packetLossCount;
         LatePacketDrops = latePacketDrops;
+        OverflowDrops = overflowDrops;
         DuplicateOrReorderedPackets = duplicateOrReorderedPackets;
         PlcCount = plcCount;
         RtcpFractionLost = rtcpFractionLost;
@@ -1662,6 +1778,8 @@ public sealed class AudioStatsEventArgs : EventArgs
     public long PacketLossCount { get; }
 
     public long LatePacketDrops { get; }
+
+    public long OverflowDrops { get; }
 
     public long DuplicateOrReorderedPackets { get; }
 

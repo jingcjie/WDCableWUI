@@ -584,6 +584,9 @@
   <data name="Audio_Stats_MeasuredBitrate.Text" xml:space="preserve">
     <value>实测码率</value>
   </data>
+  <data name="Audio_Stats_OverflowDrops.Text" xml:space="preserve">
+    <value>溢出丢帧</value>
+  </data>
 
   <!-- WiFi Direct availability -->
   <data name="WiFiDirectUnavailable_Title" xml:space="preserve">

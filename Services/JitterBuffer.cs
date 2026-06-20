@@ -17,15 +17,19 @@ public sealed record JitterBufferSnapshot(
     int QueuedFrames,
     long SequenceGaps,
     long LatePacketDrops,
+    long OverflowDrops,
     long DuplicateOrReorderedPackets,
     long PlcCount,
     int TargetDelayMs);
 
-public sealed record JitterBufferReadResult(
-    ushort SequenceNumber,
-    uint Timestamp,
-    byte[]? Payload,
-    bool IsMissing);
+public abstract record JitterBufferPollResult
+{
+    public sealed record Packet(RtpAudioFrame Frame) : JitterBufferPollResult;
+
+    public sealed record Missing(ushort SequenceNumber) : JitterBufferPollResult;
+
+    public sealed record Wait(long WaitMs) : JitterBufferPollResult;
+}
 
 public sealed record AudioLatencyProfile(
     string Mode,
@@ -38,12 +42,16 @@ public sealed class JitterBuffer
     private readonly object _lock = new();
     private readonly SortedDictionary<long, RtpAudioFrame> _frames = new();
     private readonly AudioLatencyProfile _profile;
+    private readonly Func<long> _clockMs;
     private long? _expectedExtendedSequence;
     private long? _highestExtendedSequence;
+    private long? _initialPlayoutAtMs;
+    private long? _nextPlayoutAtMs;
     private long _droppedFrames;
     private long _underflowCount;
     private long _sequenceGaps;
     private long _latePacketDrops;
+    private long _overflowDrops;
     private long _duplicateOrReorderedPackets;
     private long _plcCount;
     private int _targetDelayMs;
@@ -54,9 +62,10 @@ public sealed class JitterBuffer
     {
     }
 
-    public JitterBuffer(AudioLatencyProfile profile)
+    public JitterBuffer(AudioLatencyProfile profile, Func<long>? clockMs = null)
     {
         _profile = profile;
+        _clockMs = clockMs ?? (() => Environment.TickCount64);
         _targetDelayMs = profile.InitialDelayMs;
     }
 
@@ -97,57 +106,59 @@ public sealed class JitterBuffer
                 _highestExtendedSequence = extended;
             }
 
+            if (_initialPlayoutAtMs == null && !_started)
+            {
+                _initialPlayoutAtMs = _clockMs() + _profile.InitialDelayMs;
+            }
+
             TrimOverflowLocked();
         }
     }
 
-    public bool TryReadNext(out JitterBufferReadResult result)
+    public JitterBufferPollResult PollForPlayback()
     {
         lock (_lock)
         {
+            var nowMs = _clockMs();
             if (!_started)
             {
-                if (BufferLevelLocked() < _targetDelayMs)
+                if (_frames.Count == 0)
                 {
-                    result = new JitterBufferReadResult(0, 0, null, false);
-                    return false;
+                    return new JitterBufferPollResult.Wait(DefaultWaitMs);
+                }
+
+                var initialDeadline = _initialPlayoutAtMs ??
+                    (nowMs + _profile.InitialDelayMs);
+                _initialPlayoutAtMs = initialDeadline;
+                if (nowMs < initialDeadline)
+                {
+                    return new JitterBufferPollResult.Wait(initialDeadline - nowMs);
                 }
 
                 _started = true;
-                _expectedExtendedSequence = _frames.Count > 0 ? _frames.First().Key : 0;
+                _expectedExtendedSequence = _frames.First().Key;
+                _nextPlayoutAtMs = initialDeadline;
+            }
+
+            var playoutDeadline = _nextPlayoutAtMs ?? nowMs;
+            if (nowMs < playoutDeadline)
+            {
+                return new JitterBufferPollResult.Wait(playoutDeadline - nowMs);
             }
 
             var expected = _expectedExtendedSequence ?? 0;
-            while (_frames.Count > 0 && _frames.First().Key < expected)
-            {
-                _frames.Remove(_frames.First().Key);
-                _latePacketDrops++;
-                _droppedFrames++;
-            }
-
+            _expectedExtendedSequence = expected + 1;
+            _nextPlayoutAtMs = playoutDeadline + AudioProtocol.FrameDurationMs;
             if (_frames.TryGetValue(expected, out var frame))
             {
                 _frames.Remove(expected);
-                _expectedExtendedSequence = expected + 1;
-                result = new JitterBufferReadResult(
-                    frame.SequenceNumber,
-                    frame.Timestamp,
-                    frame.Payload,
-                    IsMissing: false);
-                return true;
+                return new JitterBufferPollResult.Packet(frame);
             }
 
             _underflowCount++;
             _sequenceGaps++;
             _plcCount++;
-            _expectedExtendedSequence = expected + 1;
-            result = new JitterBufferReadResult(
-                unchecked((ushort)expected),
-                0,
-                null,
-                IsMissing: true);
-            IncreaseTargetAfterUnderflowLocked();
-            return true;
+            return new JitterBufferPollResult.Missing(unchecked((ushort)expected));
         }
     }
 
@@ -158,10 +169,13 @@ public sealed class JitterBuffer
             _frames.Clear();
             _expectedExtendedSequence = null;
             _highestExtendedSequence = null;
+            _initialPlayoutAtMs = null;
+            _nextPlayoutAtMs = null;
             _droppedFrames = 0;
             _underflowCount = 0;
             _sequenceGaps = 0;
             _latePacketDrops = 0;
+            _overflowDrops = 0;
             _duplicateOrReorderedPackets = 0;
             _plcCount = 0;
             _targetDelayMs = _profile.InitialDelayMs;
@@ -180,6 +194,7 @@ public sealed class JitterBuffer
                 _frames.Count,
                 _sequenceGaps,
                 _latePacketDrops,
+                _overflowDrops,
                 _duplicateOrReorderedPackets,
                 _plcCount,
                 _targetDelayMs);
@@ -210,19 +225,7 @@ public sealed class JitterBuffer
             var first = _frames.First();
             _frames.Remove(first.Key);
             _droppedFrames++;
-            _latePacketDrops++;
-            if (!_expectedExtendedSequence.HasValue || first.Key >= _expectedExtendedSequence.Value)
-            {
-                _expectedExtendedSequence = first.Key + 1;
-            }
-        }
-    }
-
-    private void IncreaseTargetAfterUnderflowLocked()
-    {
-        if (_targetDelayMs < _profile.MaximumDelayMs)
-        {
-            _targetDelayMs = Math.Min(_profile.MaximumDelayMs, _targetDelayMs + AudioProtocol.FrameDurationMs);
+            _overflowDrops++;
         }
     }
 
@@ -230,4 +233,6 @@ public sealed class JitterBuffer
     {
         return _frames.Count * AudioProtocol.FrameDurationMs;
     }
+
+    private const long DefaultWaitMs = 5;
 }

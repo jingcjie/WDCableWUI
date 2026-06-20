@@ -6,65 +6,126 @@ namespace WDCableWUI.Tests;
 [TestClass]
 public sealed class JitterBufferTests
 {
-    [TestMethod]
-    public void ReadOrdersFramesBySequence()
-    {
-        var buffer = new JitterBuffer(new AudioLatencyProfile("test", 40, 40, 100));
-        buffer.Add(Frame(3));
-        buffer.Add(Frame(1));
-        buffer.Add(Frame(2));
+    private long _nowMs;
 
-        Assert.IsTrue(buffer.TryReadNext(out var first));
-        Assert.AreEqual(1, first.SequenceNumber);
-        Assert.IsTrue(buffer.TryReadNext(out var second));
-        Assert.AreEqual(2, second.SequenceNumber);
-        Assert.IsTrue(buffer.TryReadNext(out var third));
-        Assert.AreEqual(3, third.SequenceNumber);
+    [TestMethod]
+    public void InitialPacketWaitsUntilSenderSelectedPlayoutDeadline()
+    {
+        var buffer = CreateBuffer(initialDelayMs: 50);
+        buffer.Add(Frame(1));
+
+        var wait = buffer.PollForPlayback() as JitterBufferPollResult.Wait;
+        Assert.IsNotNull(wait);
+        Assert.AreEqual(50, wait.WaitMs);
+
+        _nowMs += 49;
+        Assert.IsInstanceOfType<JitterBufferPollResult.Wait>(buffer.PollForPlayback());
+
+        _nowMs++;
+        var packet = buffer.PollForPlayback() as JitterBufferPollResult.Packet;
+        Assert.IsNotNull(packet);
+        Assert.AreEqual(1, packet.Frame.SequenceNumber);
     }
 
     [TestMethod]
-    public void BufferWaitsForInitialDelayBeforeFirstFrame()
+    public void RepeatedPollingBeforeDeadlineDoesNotAdvanceOrCreatePlc()
     {
-        var buffer = new JitterBuffer(new AudioLatencyProfile("test", 60, 40, 120));
+        var buffer = CreateBuffer(initialDelayMs: 50);
         buffer.Add(Frame(1));
-        buffer.Add(Frame(2));
 
-        Assert.IsFalse(buffer.TryReadNext(out _));
-        Assert.AreEqual(0, buffer.Snapshot().UnderflowCount);
+        for (var attempt = 0; attempt < 5; attempt++)
+        {
+            Assert.IsInstanceOfType<JitterBufferPollResult.Wait>(buffer.PollForPlayback());
+        }
 
-        buffer.Add(Frame(3));
-        Assert.IsTrue(buffer.TryReadNext(out var first));
-        Assert.AreEqual(1, first.SequenceNumber);
+        _nowMs += 50;
+        Assert.IsInstanceOfType<JitterBufferPollResult.Packet>(buffer.PollForPlayback());
+        Assert.AreEqual(0, buffer.Snapshot().PlcCount);
+        Assert.AreEqual(0, buffer.Snapshot().LatePacketDrops);
     }
 
     [TestMethod]
-    public void MissingSequenceReturnsPlcRead()
+    public void MissingPacketCreatesExactlyOnePlcPerDueTick()
     {
-        var buffer = new JitterBuffer(new AudioLatencyProfile("test", 20, 20, 120));
+        var buffer = CreateBuffer(initialDelayMs: 50);
         buffer.Add(Frame(1));
         buffer.Add(Frame(3));
+        _nowMs += 50;
 
-        Assert.IsTrue(buffer.TryReadNext(out var first));
-        Assert.IsFalse(first.IsMissing);
-        Assert.AreEqual(1, first.SequenceNumber);
+        Assert.AreEqual(1, ReadPacket(buffer).SequenceNumber);
+        Assert.IsInstanceOfType<JitterBufferPollResult.Wait>(buffer.PollForPlayback());
 
-        Assert.IsTrue(buffer.TryReadNext(out var missing));
-        Assert.IsTrue(missing.IsMissing);
+        _nowMs += AudioProtocol.FrameDurationMs;
+        var missing = buffer.PollForPlayback() as JitterBufferPollResult.Missing;
+        Assert.IsNotNull(missing);
         Assert.AreEqual(2, missing.SequenceNumber);
+        Assert.IsInstanceOfType<JitterBufferPollResult.Wait>(buffer.PollForPlayback());
+
+        _nowMs += AudioProtocol.FrameDurationMs;
+        Assert.AreEqual(3, ReadPacket(buffer).SequenceNumber);
         Assert.AreEqual(1, buffer.Snapshot().PlcCount);
     }
 
     [TestMethod]
-    public void LatePacketAfterPlayoutIsDropped()
+    public void PacketBeforeDeadlineIsNotLate()
     {
-        var buffer = new JitterBuffer(new AudioLatencyProfile("test", 20, 20, 120));
-        buffer.Add(Frame(2));
-        Assert.IsTrue(buffer.TryReadNext(out var first));
-        Assert.AreEqual(2, first.SequenceNumber);
-
+        var buffer = CreateBuffer(initialDelayMs: 50);
         buffer.Add(Frame(1));
+        _nowMs += 50;
+        Assert.AreEqual(1, ReadPacket(buffer).SequenceNumber);
 
-        Assert.AreEqual(1, buffer.Snapshot().LatePacketDrops);
+        _nowMs += AudioProtocol.FrameDurationMs - 5;
+        buffer.Add(Frame(2));
+
+        Assert.AreEqual(0, buffer.Snapshot().LatePacketDrops);
+        _nowMs += 5;
+        Assert.AreEqual(2, ReadPacket(buffer).SequenceNumber);
+    }
+
+    [TestMethod]
+    public void PacketAfterMissedDeadlineIsLate()
+    {
+        var buffer = CreateBuffer(initialDelayMs: 50);
+        buffer.Add(Frame(1));
+        _nowMs += 50;
+        Assert.AreEqual(1, ReadPacket(buffer).SequenceNumber);
+
+        _nowMs += AudioProtocol.FrameDurationMs;
+        Assert.IsInstanceOfType<JitterBufferPollResult.Missing>(buffer.PollForPlayback());
+        buffer.Add(Frame(2));
+
+        var snapshot = buffer.Snapshot();
+        Assert.AreEqual(1, snapshot.LatePacketDrops);
+        Assert.AreEqual(1, snapshot.DroppedFrames);
+    }
+
+    [TestMethod]
+    public void OverflowDropsAreNotReportedAsLate()
+    {
+        var buffer = CreateBuffer(initialDelayMs: 50, maximumDelayMs: 60);
+        for (ushort sequence = 1; sequence <= 6; sequence++)
+        {
+            buffer.Add(Frame(sequence));
+        }
+
+        var snapshot = buffer.Snapshot();
+        Assert.IsTrue(snapshot.BufferLevelMs <= 60);
+        Assert.IsTrue(snapshot.OverflowDrops > 0);
+        Assert.AreEqual(snapshot.DroppedFrames, snapshot.OverflowDrops);
+        Assert.AreEqual(0, snapshot.LatePacketDrops);
+    }
+
+    [TestMethod]
+    public void SequenceWrapPreservesPlayoutOrder()
+    {
+        var buffer = CreateBuffer(initialDelayMs: 20);
+        buffer.Add(Frame(ushort.MaxValue));
+        buffer.Add(Frame(0));
+        _nowMs += 20;
+
+        Assert.AreEqual(ushort.MaxValue, ReadPacket(buffer).SequenceNumber);
+        _nowMs += AudioProtocol.FrameDurationMs;
+        Assert.AreEqual(0, ReadPacket(buffer).SequenceNumber);
     }
 
     [TestMethod]
@@ -77,11 +138,28 @@ public sealed class JitterBufferTests
         Assert.AreEqual(100, stable.Snapshot().TargetDelayMs);
     }
 
+    private JitterBuffer CreateBuffer(
+        int initialDelayMs,
+        int maximumDelayMs = 120)
+    {
+        _nowMs = 1_000;
+        return new JitterBuffer(
+            new AudioLatencyProfile("test", initialDelayMs, initialDelayMs, maximumDelayMs),
+            () => _nowMs);
+    }
+
+    private static RtpAudioFrame ReadPacket(JitterBuffer buffer)
+    {
+        var packet = buffer.PollForPlayback() as JitterBufferPollResult.Packet;
+        Assert.IsNotNull(packet);
+        return packet.Frame;
+    }
+
     private static RtpAudioFrame Frame(ushort sequenceNumber)
     {
         return new RtpAudioFrame(
             sequenceNumber,
-            sequenceNumber * AudioProtocol.RtpTimestampIncrement,
+            unchecked((uint)(sequenceNumber * AudioProtocol.RtpTimestampIncrement)),
             ReceivedAtMs: sequenceNumber,
             Payload: [(byte)sequenceNumber]);
     }

@@ -269,6 +269,7 @@ public sealed partial class AudioPage : Page
             UnderflowText.Text = e.UnderflowCount.ToString();
             PacketLossText.Text = e.PacketLossCount.ToString();
             LateDropsText.Text = e.LatePacketDrops.ToString();
+            OverflowDropsText.Text = e.OverflowDrops.ToString();
             PlcText.Text = e.PlcCount.ToString();
             RtcpLossText.Text = FormatFractionLost(e.RtcpFractionLost);
             RtcpJitterText.Text = FormatRtpJitter(e.RtcpJitter == 0 ? e.LocalJitter : e.RtcpJitter);
@@ -281,8 +282,9 @@ public sealed partial class AudioPage : Page
     {
         DispatcherQueue.TryEnqueue(() =>
         {
-            ShowInfo(e.Message, InfoBarSeverity.Error);
-            StateDetailsText.Text = e.Message;
+            var displayMessage = $"{e.Code}: {e.Message}";
+            ShowInfo(displayMessage, InfoBarSeverity.Error);
+            StateDetailsText.Text = displayMessage;
             UpdateButtonStates();
         });
     }
