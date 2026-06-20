@@ -79,7 +79,6 @@ public sealed class SessionReadyEventArgs : EventArgs
 
     public IReadOnlyList<string> PeerCapabilities { get; }
 }
-
 public sealed class SessionFailedEventArgs : EventArgs
 {
     public SessionFailedEventArgs(
@@ -142,11 +141,15 @@ public sealed class AudioSessionInfo
     public AudioSessionInfo(
         string sessionId,
         SessionRole role,
+        SessionTransportRole transportRole,
+        string? localAddress,
         string? peerAddress,
         IReadOnlyList<string> peerCapabilities)
     {
         SessionId = sessionId;
         Role = role;
+        TransportRole = transportRole;
+        LocalAddress = localAddress;
         PeerAddress = peerAddress;
         PeerCapabilities = peerCapabilities;
     }
@@ -155,36 +158,11 @@ public sealed class AudioSessionInfo
 
     public SessionRole Role { get; }
 
+    public SessionTransportRole TransportRole { get; }
+
+    public string? LocalAddress { get; }
+
     public string? PeerAddress { get; }
 
     public IReadOnlyList<string> PeerCapabilities { get; }
-}
-
-public sealed class AudioTransportEventArgs : EventArgs
-{
-    public AudioTransportEventArgs(string sessionId, long streamId)
-    {
-        SessionId = sessionId;
-        StreamId = streamId;
-    }
-
-    public string SessionId { get; }
-
-    public long StreamId { get; }
-}
-
-public sealed class AudioTransportClosedEventArgs : EventArgs
-{
-    public AudioTransportClosedEventArgs(string sessionId, long streamId, string reason)
-    {
-        SessionId = sessionId;
-        StreamId = streamId;
-        Reason = reason;
-    }
-
-    public string SessionId { get; }
-
-    public long StreamId { get; }
-
-    public string Reason { get; }
 }

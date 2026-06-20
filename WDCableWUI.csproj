@@ -53,10 +53,10 @@
     <ProjectCapability Include="Msix" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Concentus" Version="2.2.2" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.4654" />
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.7.250606001" />
     <PackageReference Include="NAudio.Wasapi" Version="2.3.0" />
+    <PackageReference Include="OpusSharp" Version="1.6.8" />
   </ItemGroup>
 
   <ItemGroup>

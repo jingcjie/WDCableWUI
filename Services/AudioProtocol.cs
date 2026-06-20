@@ -1,7 +1,7 @@
 using System;
-using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Text.Json;
 using WDCableWUI.Protocol;
 
@@ -9,11 +9,12 @@ namespace WDCableWUI.Services;
 
 public static class AudioProtocol
 {
+    private static readonly Lazy<bool> AudioRuntimeAvailable = new(CheckAudioRuntimeAvailable);
+
     public const string KindReceiveReady = "audio.receive.ready";
     public const string KindReceiveStopped = "audio.receive.stopped";
     public const string KindOffer = "audio.offer";
     public const string KindAccept = "audio.accept";
-    public const string KindTransport = "audio.transport";
     public const string KindStop = "audio.stop";
 
     public const string ErrorUnsupported = "audio_unsupported";
@@ -24,24 +25,75 @@ public static class AudioProtocol
     public const string ErrorTransportFailed = "audio_transport_failed";
     public const string ErrorCaptureFailed = "audio_capture_failed";
     public const string ErrorPlaybackFailed = "audio_playback_failed";
+    public const string ErrorRtpBindFailed = "audio_rtp_bind_failed";
+    public const string ErrorRtpProbeTimeout = "audio_rtp_probe_timeout";
+    public const string ErrorRtpSendFailed = "audio_rtp_send_failed";
+    public const string ErrorRtpReceiveFailed = "audio_rtp_receive_failed";
+    public const string ErrorRtpUnsupported = "audio_rtp_unsupported";
 
     public const string SourceMicrophone = "microphone";
     public const string SourceSystemAudio = "systemAudio";
     public const string CodecOpus = "opus";
-    public const string TransportTcp = "tcp";
+    public const string CodecImplLibOpus = "libopus";
+    public const string TransportRtpUdp = "rtp-udp";
 
+    public const string LatencyModeLow = "lowLatency";
+    public const string LatencyModeStable = "stable";
+
+    public const int RtpPort = 8990;
+    public const int RtcpPort = 8991;
+    public const byte RtpPayloadType = 111;
+    public const int RtpClockRate = 48_000;
     public const int SampleRate = 48_000;
     public const int Channels = 1;
     public const int FrameDurationMs = 20;
-    public const int BitrateBps = 24_000;
+    public const int BitrateBps = 32_000;
     public const int SamplesPerFrame = SampleRate * FrameDurationMs / 1000;
-    public const int OpusPreSkipSamples = 312;
-    public const long OpusSeekPreRollNs = 80_000_000;
+    public const uint RtpTimestampIncrement = SamplesPerFrame;
+
+    public static readonly byte[] RtpProbePayload = "WDCABLE-AUDIO-RTP-PROBE"u8.ToArray();
+    public static readonly byte[] RtcpProbePayload = "WDCABLE-AUDIO-RTCP-PROBE"u8.ToArray();
 
     public static bool PeerSupportsAudio(IReadOnlyList<string> capabilities)
     {
         return capabilities.Contains(ProtocolConstants.CapabilityAudioLink) &&
-               capabilities.Contains(ProtocolConstants.CapabilityAudioCodecOpus);
+               capabilities.Contains(ProtocolConstants.CapabilityAudioCodecOpus) &&
+               capabilities.Contains(ProtocolConstants.CapabilityAudioTransportRtp) &&
+               capabilities.Contains(ProtocolConstants.CapabilityAudioRtcp) &&
+               capabilities.Contains(ProtocolConstants.CapabilityAudioCodecLibOpus);
+    }
+
+    public static IReadOnlyList<string> AdvertisedCapabilitiesForRuntime()
+    {
+        var capabilities = ProtocolConstants.AdvertisedCapabilities
+            .Where(capability => !IsAudioCapability(capability))
+            .ToList();
+        if (AudioRuntimeAvailable.Value)
+        {
+            capabilities.Add(ProtocolConstants.CapabilityAudioLink);
+            capabilities.Add(ProtocolConstants.CapabilityAudioCodecOpus);
+            capabilities.Add(ProtocolConstants.CapabilityAudioTransportRtp);
+            capabilities.Add(ProtocolConstants.CapabilityAudioRtcp);
+            capabilities.Add(ProtocolConstants.CapabilityAudioCodecLibOpus);
+        }
+
+        return capabilities;
+    }
+
+    public static bool OwnsFixedAudioPorts(SessionTransportRole transportRole)
+    {
+        return transportRole == SessionTransportRole.Listener;
+    }
+
+    public static bool ReceiverProbeRequired(SessionTransportRole receiverTransportRole)
+    {
+        return receiverTransportRole == SessionTransportRole.Connector;
+    }
+
+    public static uint NewSsrc()
+    {
+        var value = RandomNumberGenerator.GetInt32(1, int.MaxValue);
+        return unchecked((uint)value);
     }
 
     public static string ReceiveReady(long streamId)
@@ -62,46 +114,57 @@ public static class AudioProtocol
         });
     }
 
-    public static string Offer(long streamId, string offerId)
+    public static string Offer(
+        long streamId,
+        string offerId,
+        string source,
+        uint senderSsrc,
+        SessionTransportRole transportRole)
     {
         return BuildMetadata(new Dictionary<string, object?>
         {
             ["kind"] = KindOffer,
             ["streamId"] = streamId,
             ["offerId"] = offerId,
-            // Compatibility with the current Android receiver: Windows captures
-            // system audio, but the current Android build accepts microphone only.
-            ["source"] = SourceMicrophone,
+            ["transport"] = TransportRtpUdp,
+            ["source"] = source,
             ["codec"] = CodecOpus,
+            ["codecImpl"] = CodecImplLibOpus,
             ["sampleRate"] = SampleRate,
             ["channels"] = Channels,
             ["frameDurationMs"] = FrameDurationMs,
-            ["bitrateBps"] = BitrateBps
+            ["bitrateBps"] = BitrateBps,
+            ["rtpPayloadType"] = RtpPayloadType,
+            ["rtpClockRate"] = RtpClockRate,
+            ["rtpSsrc"] = senderSsrc,
+            ["transportRole"] = transportRole.GetEventName()
         });
     }
 
-    public static string Accept(long streamId, string offerId)
+    public static string Accept(
+        long streamId,
+        string offerId,
+        uint receiverSsrc,
+        SessionTransportRole transportRole,
+        bool receiverProbeRequired)
     {
         return BuildMetadata(new Dictionary<string, object?>
         {
             ["kind"] = KindAccept,
             ["streamId"] = streamId,
             ["offerId"] = offerId,
+            ["transport"] = TransportRtpUdp,
             ["codec"] = CodecOpus,
+            ["codecImpl"] = CodecImplLibOpus,
             ["sampleRate"] = SampleRate,
             ["channels"] = Channels,
-            ["frameDurationMs"] = FrameDurationMs
-        });
-    }
-
-    public static string Transport(long streamId, int port)
-    {
-        return BuildMetadata(new Dictionary<string, object?>
-        {
-            ["kind"] = KindTransport,
-            ["streamId"] = streamId,
-            ["transport"] = TransportTcp,
-            ["port"] = port
+            ["frameDurationMs"] = FrameDurationMs,
+            ["bitrateBps"] = BitrateBps,
+            ["rtpPayloadType"] = RtpPayloadType,
+            ["rtpClockRate"] = RtpClockRate,
+            ["rtpSsrc"] = receiverSsrc,
+            ["transportRole"] = transportRole.GetEventName(),
+            ["receiverProbeRequired"] = receiverProbeRequired
         });
     }
 
@@ -113,39 +176,6 @@ public static class AudioProtocol
             ["streamId"] = streamId,
             ["reason"] = reason
         });
-    }
-
-    public static string FrameMetadata(long sentAtMs, bool codecConfig = false, int? codecConfigIndex = null)
-    {
-        var values = new Dictionary<string, object?>
-        {
-            ["codec"] = CodecOpus,
-            ["sentAtMs"] = sentAtMs,
-            ["durationMs"] = codecConfig ? 0 : FrameDurationMs,
-            ["codecConfig"] = codecConfig
-        };
-
-        if (codecConfigIndex != null)
-        {
-            values["codecConfigIndex"] = codecConfigIndex.Value;
-        }
-
-        return BuildMetadata(values);
-    }
-
-    public static IReadOnlyList<byte[]> AndroidOpusCodecConfigPackets()
-    {
-        return
-        [
-            OpusHead(),
-            Int64LittleEndian(OpusCodecDelayNs()),
-            Int64LittleEndian(OpusSeekPreRollNs)
-        ];
-    }
-
-    public static long OpusCodecDelayNs()
-    {
-        return OpusPreSkipSamples * 1_000_000_000L / SampleRate;
     }
 
     public static string BuildMetadata(IDictionary<string, object?> values)
@@ -176,12 +206,18 @@ public static class AudioProtocol
         return new AudioOffer(
             RequiredInt64(metadata, "streamId"),
             RequiredString(metadata, "offerId"),
+            RequiredString(metadata, "transport"),
             RequiredString(metadata, "source"),
             RequiredString(metadata, "codec"),
-            OptionalInt32(metadata, "sampleRate"),
-            OptionalInt32(metadata, "channels"),
-            OptionalInt32(metadata, "frameDurationMs"),
-            OptionalInt32(metadata, "bitrateBps"));
+            RequiredString(metadata, "codecImpl"),
+            RequiredInt32(metadata, "sampleRate"),
+            RequiredInt32(metadata, "channels"),
+            RequiredInt32(metadata, "frameDurationMs"),
+            RequiredInt32(metadata, "bitrateBps"),
+            RequiredInt32(metadata, "rtpPayloadType"),
+            RequiredInt32(metadata, "rtpClockRate"),
+            RequiredUInt32(metadata, "rtpSsrc"),
+            RequiredTransportRole(metadata, "transportRole"));
     }
 
     public static AudioAccept ParseAccept(IReadOnlyDictionary<string, JsonElement> metadata)
@@ -190,37 +226,47 @@ public static class AudioProtocol
         return new AudioAccept(
             RequiredInt64(metadata, "streamId"),
             RequiredString(metadata, "offerId"),
-            RequiredString(metadata, "codec"),
-            OptionalInt32(metadata, "sampleRate"),
-            OptionalInt32(metadata, "channels"),
-            OptionalInt32(metadata, "frameDurationMs"));
-    }
-
-    public static AudioTransportOffer ParseTransport(IReadOnlyDictionary<string, JsonElement> metadata)
-    {
-        RequireKind(metadata, KindTransport);
-        return new AudioTransportOffer(
-            RequiredInt64(metadata, "streamId"),
             RequiredString(metadata, "transport"),
-            OptionalInt32(metadata, "port", -1));
+            RequiredString(metadata, "codec"),
+            RequiredString(metadata, "codecImpl"),
+            RequiredInt32(metadata, "sampleRate"),
+            RequiredInt32(metadata, "channels"),
+            RequiredInt32(metadata, "frameDurationMs"),
+            RequiredInt32(metadata, "bitrateBps"),
+            RequiredInt32(metadata, "rtpPayloadType"),
+            RequiredInt32(metadata, "rtpClockRate"),
+            RequiredUInt32(metadata, "rtpSsrc"),
+            RequiredTransportRole(metadata, "transportRole"),
+            RequiredBoolean(metadata, "receiverProbeRequired"));
     }
 
-    public static EncodedAudioFrame ParseAudioFrame(ProtocolFrame frame)
+    public static bool IsCompatibleOffer(AudioOffer offer)
     {
-        var metadata = ParseMetadata(frame.MetadataJson);
-        var codec = OptionalString(metadata, "codec");
-        if (codec != CodecOpus)
-        {
-            throw new FormatException($"Unsupported audio codec: {codec}");
-        }
+        return offer.Transport == TransportRtpUdp &&
+               offer.Codec == CodecOpus &&
+               offer.CodecImpl == CodecImplLibOpus &&
+               offer.SampleRate == SampleRate &&
+               offer.Channels == Channels &&
+               offer.FrameDurationMs == FrameDurationMs &&
+               offer.RtpPayloadType == RtpPayloadType &&
+               offer.RtpClockRate == RtpClockRate;
+    }
 
-        var codecConfig = OptionalBoolean(metadata, "codecConfig");
-        return new EncodedAudioFrame(
-            frame.SequenceNumber,
-            OptionalInt64(metadata, "sentAtMs", DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()),
-            OptionalInt32(metadata, "durationMs", codecConfig ? 0 : FrameDurationMs),
-            frame.Payload,
-            codecConfig);
+    public static bool IsCompatibleAccept(AudioAccept accept)
+    {
+        return accept.Transport == TransportRtpUdp &&
+               accept.Codec == CodecOpus &&
+               accept.CodecImpl == CodecImplLibOpus &&
+               accept.SampleRate == SampleRate &&
+               accept.Channels == Channels &&
+               accept.FrameDurationMs == FrameDurationMs &&
+               accept.RtpPayloadType == RtpPayloadType &&
+               accept.RtpClockRate == RtpClockRate;
+    }
+
+    public static string NormalizeLatencyMode(string? value)
+    {
+        return value == LatencyModeStable ? LatencyModeStable : LatencyModeLow;
     }
 
     public static string OptionalString(IReadOnlyDictionary<string, JsonElement> metadata, string key, string fallback = "")
@@ -261,12 +307,55 @@ public static class AudioProtocol
         return number;
     }
 
+    public static int RequiredInt32(IReadOnlyDictionary<string, JsonElement> metadata, string key)
+    {
+        if (!metadata.TryGetValue(key, out var value) || !value.TryGetInt32(out var number))
+        {
+            throw new FormatException($"Missing {key}");
+        }
+
+        return number;
+    }
+
+    public static uint RequiredUInt32(IReadOnlyDictionary<string, JsonElement> metadata, string key)
+    {
+        if (!metadata.TryGetValue(key, out var value) || !value.TryGetUInt32(out var number))
+        {
+            throw new FormatException($"Missing {key}");
+        }
+
+        return number;
+    }
+
+    public static bool RequiredBoolean(IReadOnlyDictionary<string, JsonElement> metadata, string key)
+    {
+        if (!metadata.TryGetValue(key, out var value) || value.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+        {
+            throw new FormatException($"Missing {key}");
+        }
+
+        return value.GetBoolean();
+    }
+
     public static string RequiredString(IReadOnlyDictionary<string, JsonElement> metadata, string key)
     {
         var value = OptionalString(metadata, key);
         return !string.IsNullOrWhiteSpace(value)
             ? value
             : throw new FormatException($"Missing {key}");
+    }
+
+    public static SessionTransportRole RequiredTransportRole(
+        IReadOnlyDictionary<string, JsonElement> metadata,
+        string key)
+    {
+        var role = RequiredString(metadata, key);
+        return role switch
+        {
+            "listener" => SessionTransportRole.Listener,
+            "connector" => SessionTransportRole.Connector,
+            _ => throw new FormatException($"Unsupported {key}: {role}")
+        };
     }
 
     private static void RequireKind(IReadOnlyDictionary<string, JsonElement> metadata, string kind)
@@ -278,46 +367,60 @@ public static class AudioProtocol
         }
     }
 
-    private static byte[] OpusHead()
+    private static bool IsAudioCapability(string capability)
     {
-        var header = new byte[19];
-        "OpusHead"u8.CopyTo(header);
-        header[8] = 1; // OpusHead version.
-        header[9] = Channels;
-        BinaryPrimitives.WriteUInt16LittleEndian(header.AsSpan(10, 2), OpusPreSkipSamples);
-        BinaryPrimitives.WriteInt32LittleEndian(header.AsSpan(12, 4), SampleRate);
-        BinaryPrimitives.WriteInt16LittleEndian(header.AsSpan(16, 2), 0); // Output gain.
-        header[18] = 0; // Mono/stereo channel mapping family.
-        return header;
+        return capability is ProtocolConstants.CapabilityAudioLink
+            or ProtocolConstants.CapabilityAudioCodecOpus
+            or ProtocolConstants.CapabilityAudioTransportRtp
+            or ProtocolConstants.CapabilityAudioRtcp
+            or ProtocolConstants.CapabilityAudioCodecLibOpus;
     }
 
-    private static byte[] Int64LittleEndian(long value)
+    private static bool CheckAudioRuntimeAvailable()
     {
-        var buffer = new byte[sizeof(long)];
-        BinaryPrimitives.WriteInt64LittleEndian(buffer, value);
-        return buffer;
+        try
+        {
+            using var encoder = new LibOpusAudioEncoder();
+            using var decoder = new LibOpusAudioDecoder();
+            var encoded = encoder.Encode(new short[SamplesPerFrame]);
+            _ = encoded.Length > 0 ? decoder.Decode(encoded) : decoder.DecodeMissing();
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
     }
 }
 
 public sealed record AudioOffer(
     long StreamId,
     string OfferId,
+    string Transport,
     string Source,
     string Codec,
+    string CodecImpl,
     int SampleRate,
     int Channels,
     int FrameDurationMs,
-    int BitrateBps);
+    int BitrateBps,
+    int RtpPayloadType,
+    int RtpClockRate,
+    uint RtpSsrc,
+    SessionTransportRole TransportRole);
 
 public sealed record AudioAccept(
     long StreamId,
     string OfferId,
+    string Transport,
     string Codec,
+    string CodecImpl,
     int SampleRate,
     int Channels,
-    int FrameDurationMs);
-
-public sealed record AudioTransportOffer(
-    long StreamId,
-    string Transport,
-    int Port);
+    int FrameDurationMs,
+    int BitrateBps,
+    int RtpPayloadType,
+    int RtpClockRate,
+    uint RtpSsrc,
+    SessionTransportRole TransportRole,
+    bool ReceiverProbeRequired);

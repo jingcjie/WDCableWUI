@@ -24,7 +24,7 @@ internal static class SessionHandshakeMetadata
             ["role"] = role.GetEventName(),
             ["transportRole"] = transportRole.GetEventName(),
             ["sessionId"] = sessionId,
-            ["capabilities"] = ProtocolConstants.AdvertisedCapabilities,
+            ["capabilities"] = AudioProtocol.AdvertisedCapabilitiesForRuntime(),
             ["channels"] = channels
         };
     }

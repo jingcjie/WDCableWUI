@@ -7,64 +7,82 @@ namespace WDCableWUI.Tests;
 public sealed class JitterBufferTests
 {
     [TestMethod]
-    public void PollReadyOrdersFramesBySequence()
+    public void ReadOrdersFramesBySequence()
     {
-        var buffer = new JitterBuffer(targetBufferMs: 40, maxBufferMs: 200);
+        var buffer = new JitterBuffer(new AudioLatencyProfile("test", 40, 40, 100));
         buffer.Add(Frame(3));
         buffer.Add(Frame(1));
         buffer.Add(Frame(2));
 
-        Assert.AreEqual(1, buffer.PollReady()?.SequenceNumber);
-        Assert.AreEqual(2, buffer.PollReady()?.SequenceNumber);
-        Assert.AreEqual(3, buffer.PollReady()?.SequenceNumber);
+        Assert.IsTrue(buffer.TryReadNext(out var first));
+        Assert.AreEqual(1, first.SequenceNumber);
+        Assert.IsTrue(buffer.TryReadNext(out var second));
+        Assert.AreEqual(2, second.SequenceNumber);
+        Assert.IsTrue(buffer.TryReadNext(out var third));
+        Assert.AreEqual(3, third.SequenceNumber);
     }
 
     [TestMethod]
-    public void BufferWaitsForTargetBeforeFirstPlayableFrame()
+    public void BufferWaitsForInitialDelayBeforeFirstFrame()
     {
-        var buffer = new JitterBuffer(targetBufferMs: 60, maxBufferMs: 200);
+        var buffer = new JitterBuffer(new AudioLatencyProfile("test", 60, 40, 120));
         buffer.Add(Frame(1));
+        buffer.Add(Frame(2));
 
-        Assert.IsNull(buffer.PollReady());
+        Assert.IsFalse(buffer.TryReadNext(out _));
         Assert.AreEqual(0, buffer.Snapshot().UnderflowCount);
 
-        buffer.Add(Frame(2));
         buffer.Add(Frame(3));
-        Assert.AreEqual(1, buffer.PollReady()?.SequenceNumber);
+        Assert.IsTrue(buffer.TryReadNext(out var first));
+        Assert.AreEqual(1, first.SequenceNumber);
     }
 
     [TestMethod]
-    public void OverflowDropsOldestFrames()
+    public void MissingSequenceReturnsPlcRead()
     {
-        var buffer = new JitterBuffer(targetBufferMs: 20, maxBufferMs: 40);
+        var buffer = new JitterBuffer(new AudioLatencyProfile("test", 20, 20, 120));
         buffer.Add(Frame(1));
-        buffer.Add(Frame(2));
         buffer.Add(Frame(3));
 
-        var snapshot = buffer.Snapshot();
-        Assert.AreEqual(1, snapshot.DroppedFrames);
-        Assert.AreEqual(40, snapshot.BufferLevelMs);
-        Assert.AreEqual(2, buffer.PollReady()?.SequenceNumber);
+        Assert.IsTrue(buffer.TryReadNext(out var first));
+        Assert.IsFalse(first.IsMissing);
+        Assert.AreEqual(1, first.SequenceNumber);
+
+        Assert.IsTrue(buffer.TryReadNext(out var missing));
+        Assert.IsTrue(missing.IsMissing);
+        Assert.AreEqual(2, missing.SequenceNumber);
+        Assert.AreEqual(1, buffer.Snapshot().PlcCount);
     }
 
     [TestMethod]
-    public void StaleFrameAfterPopIsDropped()
+    public void LatePacketAfterPlayoutIsDropped()
     {
-        var buffer = new JitterBuffer(targetBufferMs: 20, maxBufferMs: 200);
+        var buffer = new JitterBuffer(new AudioLatencyProfile("test", 20, 20, 120));
         buffer.Add(Frame(2));
-        Assert.AreEqual(2, buffer.PollReady()?.SequenceNumber);
+        Assert.IsTrue(buffer.TryReadNext(out var first));
+        Assert.AreEqual(2, first.SequenceNumber);
 
         buffer.Add(Frame(1));
 
-        Assert.AreEqual(1, buffer.Snapshot().DroppedFrames);
+        Assert.AreEqual(1, buffer.Snapshot().LatePacketDrops);
     }
 
-    private static EncodedAudioFrame Frame(long sequenceNumber)
+    [TestMethod]
+    public void StableModeUsesLargerInitialDelay()
     {
-        return new EncodedAudioFrame(
+        var low = new JitterBuffer(AudioProtocol.LatencyModeLow);
+        var stable = new JitterBuffer(AudioProtocol.LatencyModeStable);
+
+        Assert.AreEqual(50, low.Snapshot().TargetDelayMs);
+        Assert.AreEqual(100, stable.Snapshot().TargetDelayMs);
+    }
+
+    private static RtpAudioFrame Frame(ushort sequenceNumber)
+    {
+        return new RtpAudioFrame(
             sequenceNumber,
-            SentAtMs: sequenceNumber,
-            DurationMs: AudioProtocol.FrameDurationMs,
+            sequenceNumber * AudioProtocol.RtpTimestampIncrement,
+            ReceivedAtMs: sequenceNumber,
             Payload: [(byte)sequenceNumber]);
     }
 }

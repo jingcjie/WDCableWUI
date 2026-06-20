@@ -83,6 +83,11 @@ namespace WDCableWUI.Services
                     var defaultDownloadPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
                     _localSettings.Values["DownloadPath"] = defaultDownloadPath;
                 }
+
+                if (!_localSettings.Values.ContainsKey("AudioLatencyMode"))
+                {
+                    _localSettings.Values["AudioLatencyMode"] = AudioProtocol.LatencyModeLow;
+                }
             }
             catch (Exception ex)
             {

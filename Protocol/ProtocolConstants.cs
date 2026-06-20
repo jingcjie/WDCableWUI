@@ -20,6 +20,9 @@ public static class ProtocolConstants
     public const string CapabilityDiagnosticsExport = "diagnostics.export";
     public const string CapabilityAudioLink = "audio.link";
     public const string CapabilityAudioCodecOpus = "audio.codec.opus";
+    public const string CapabilityAudioTransportRtp = "audio.transport.rtp";
+    public const string CapabilityAudioRtcp = "audio.rtcp";
+    public const string CapabilityAudioCodecLibOpus = "audio.codec.libopus";
 
     public static readonly string[] AdvertisedCapabilities =
     [
@@ -28,6 +31,9 @@ public static class ProtocolConstants
         CapabilityBulkSpeed,
         CapabilityDiagnosticsExport,
         CapabilityAudioLink,
-        CapabilityAudioCodecOpus
+        CapabilityAudioCodecOpus,
+        CapabilityAudioTransportRtp,
+        CapabilityAudioRtcp,
+        CapabilityAudioCodecLibOpus
     ];
 }

@@ -189,6 +189,15 @@ public sealed class ProtocolCodecTests
         CollectionAssert.Contains(
             ProtocolConstants.AdvertisedCapabilities,
             ProtocolConstants.CapabilityAudioCodecOpus);
+        CollectionAssert.Contains(
+            ProtocolConstants.AdvertisedCapabilities,
+            ProtocolConstants.CapabilityAudioTransportRtp);
+        CollectionAssert.Contains(
+            ProtocolConstants.AdvertisedCapabilities,
+            ProtocolConstants.CapabilityAudioRtcp);
+        CollectionAssert.Contains(
+            ProtocolConstants.AdvertisedCapabilities,
+            ProtocolConstants.CapabilityAudioCodecLibOpus);
     }
 
     [TestMethod]

@@ -31,14 +31,10 @@ public sealed class SessionManager : IDisposable
     private readonly SemaphoreSlim _lifecycleLock = new(1, 1);
     private readonly SessionStateMachine _stateMachine = new();
     private readonly object _stateLock = new();
-    private readonly object _audioTransportLock = new();
 
     private WiFiDirectService? _wifiDirectService;
     private ISessionTransportAdapter? _transportAdapter;
     private SessionRuntime? _runtime;
-    private ISessionTransportListener? _audioListener;
-    private ISessionTransport? _audioTransport;
-    private long _audioStreamId;
     private CancellationTokenSource? _sessionCancellationTokenSource;
     private SessionLinkInfo? _activeLink;
     private int _generation;
@@ -90,9 +86,6 @@ public sealed class SessionManager : IDisposable
     public event EventHandler<SessionDisconnectEventArgs>? DisconnectReasonChanged;
     public event EventHandler<ProtocolFrameReceivedEventArgs>? ControlFrameReceived;
     public event EventHandler<ProtocolFrameReceivedEventArgs>? BulkFrameReceived;
-    public event EventHandler<ProtocolFrameReceivedEventArgs>? AudioFrameReceived;
-    public event EventHandler<AudioTransportEventArgs>? AudioTransportReady;
-    public event EventHandler<AudioTransportClosedEventArgs>? AudioTransportClosed;
 
     public SessionPhase CurrentPhase
     {
@@ -217,6 +210,8 @@ public sealed class SessionManager : IDisposable
             : new AudioSessionInfo(
                 runtime.SessionId,
                 runtime.Role,
+                runtime.TransportRole,
+                runtime.Link.LocalAddress,
                 runtime.PeerAddress,
                 runtime.PeerCapabilities);
     }
@@ -251,169 +246,6 @@ public sealed class SessionManager : IDisposable
             cancellationToken: cancellationToken).ConfigureAwait(false);
     }
 
-    public Task<int> StartAudioListenerAsync(
-        long streamId,
-        CancellationToken cancellationToken = default)
-    {
-        var runtime = RequireReadyRuntime();
-        if (runtime.Role != SessionRole.GroupOwner)
-        {
-            throw new InvalidOperationException("Only the group owner can listen for the audio channel.");
-        }
-
-        CloseAudioTransport();
-        var localAddress = ParseAddressOrAny(runtime.Link.LocalAddress);
-        var listener = RequireTransportAdapter().Listen(ProtocolChannel.Audio, localAddress, 0);
-        lock (_audioTransportLock)
-        {
-            _audioStreamId = streamId;
-            _audioListener = listener;
-        }
-
-        var acceptToken = CreateLinkedAudioToken(cancellationToken);
-        _ = Task.Run(
-            async () =>
-            {
-                try
-                {
-                    var transport = await listener.AcceptAsync(() => !IsCurrent(runtime.Generation), acceptToken.Token).ConfigureAwait(false);
-                    lock (_audioTransportLock)
-                    {
-                        if (_audioListener == listener)
-                        {
-                            _audioListener = null;
-                        }
-
-                        _audioTransport = transport;
-                        _audioStreamId = streamId;
-                    }
-
-                    StartAudioReadLoop(runtime, transport, streamId);
-                    RaiseEvent(AudioTransportReady, new AudioTransportEventArgs(runtime.SessionId, streamId));
-                }
-                catch (Exception ex) when (ex is not OperationCanceledException)
-                {
-                    var stillCurrent = IsCurrent(runtime.Generation);
-                    lock (_audioTransportLock)
-                    {
-                        if (_audioListener == listener)
-                        {
-                            _audioListener = null;
-                        }
-                    }
-
-                    if (stillCurrent)
-                    {
-                        RaiseEvent(AudioTransportClosed, new AudioTransportClosedEventArgs(runtime.SessionId, streamId, ex.Message));
-                    }
-                }
-                finally
-                {
-                    acceptToken.Dispose();
-                }
-            },
-            CancellationToken.None);
-
-        return Task.FromResult(listener.Port);
-    }
-
-    public async Task ConnectAudioTransportAsync(
-        long streamId,
-        int port,
-        CancellationToken cancellationToken = default)
-    {
-        var runtime = RequireReadyRuntime();
-        if (runtime.Role != SessionRole.Client)
-        {
-            throw new InvalidOperationException("Only the client connects to the audio channel.");
-        }
-
-        if (port <= 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(port), port, "Audio port must be positive.");
-        }
-
-        CloseAudioTransport();
-        using var connectToken = CreateLinkedAudioToken(cancellationToken);
-        var transport = await ConnectChannelWithRetryAsync(
-            ProtocolChannel.Audio,
-            runtime.PeerAddress,
-            port,
-            runtime.Generation,
-            connectToken.Token).ConfigureAwait(false);
-
-        lock (_audioTransportLock)
-        {
-            _audioTransport = transport;
-            _audioStreamId = streamId;
-        }
-
-        StartAudioReadLoop(runtime, transport, streamId);
-        RaiseEvent(AudioTransportReady, new AudioTransportEventArgs(runtime.SessionId, streamId));
-    }
-
-    public async Task WriteAudioFrameAsync(
-        long streamId,
-        long sequenceNumber,
-        string metadataJson,
-        byte[] payload,
-        CancellationToken cancellationToken = default)
-    {
-        ISessionTransport? transport;
-        lock (_audioTransportLock)
-        {
-            transport = _audioTransport;
-        }
-
-        if (transport == null)
-        {
-            throw new IOException("Audio channel is not connected.");
-        }
-
-        var runtime = RequireReadyRuntime();
-        var frame = new ProtocolFrame(
-            ProtocolFrameType.AudioFrame,
-            ProtocolChannel.Audio,
-            streamId: streamId,
-            sequenceNumber: sequenceNumber,
-            correlationId: Guid.NewGuid(),
-            metadataJson: metadataJson,
-            payload: payload);
-
-        await transport.WriteFrameAsync(frame, cancellationToken).ConfigureAwait(false);
-    }
-
-    public void CloseAudioTransport()
-    {
-        ISessionTransportListener? listener;
-        ISessionTransport? transport;
-        lock (_audioTransportLock)
-        {
-            listener = _audioListener;
-            transport = _audioTransport;
-            _audioListener = null;
-            _audioTransport = null;
-            _audioStreamId = 0;
-        }
-
-        try
-        {
-            listener?.Dispose();
-        }
-        catch
-        {
-        }
-
-        try
-        {
-            transport?.Cancel();
-            transport?.Dispose();
-        }
-        catch
-        {
-        }
-    }
-
     public async Task DisconnectAsync(string reason = "local_disconnect")
     {
         await _lifecycleLock.WaitAsync().ConfigureAwait(false);
@@ -446,7 +278,6 @@ public sealed class SessionManager : IDisposable
         _sessionCancellationTokenSource?.Cancel();
         _sessionCancellationTokenSource?.Dispose();
         _sessionCancellationTokenSource = null;
-        CloseAudioTransport();
         _runtime?.Close();
         _runtime = null;
         _transportAdapter?.Dispose();
@@ -985,58 +816,6 @@ public sealed class SessionManager : IDisposable
         }, CancellationToken.None);
     }
 
-    private void StartAudioReadLoop(SessionRuntime runtime, ISessionTransport transport, long streamId)
-    {
-        var cancellationToken = _sessionCancellationTokenSource?.Token ?? CancellationToken.None;
-        _ = Task.Run(async () =>
-        {
-            while (IsCurrent(runtime.Generation) && CurrentPhase == SessionPhase.Ready && !cancellationToken.IsCancellationRequested)
-            {
-                try
-                {
-                    var frame = await transport.ReadFrameAsync(cancellationToken).ConfigureAwait(false)
-                        ?? throw new IOException("Audio channel closed by peer");
-                    runtime.MarkFrameReceived();
-
-                    if (frame.Type == ProtocolFrameType.AudioFrame && frame.Channel == ProtocolChannel.Audio)
-                    {
-                        RaiseEvent(AudioFrameReceived, new ProtocolFrameReceivedEventArgs(runtime.SessionId, frame));
-                    }
-                }
-                catch (Exception ex) when (ex is not OperationCanceledException)
-                {
-                    var wasActive = false;
-                    lock (_audioTransportLock)
-                    {
-                        if (_audioTransport == transport)
-                        {
-                            _audioTransport = null;
-                            _audioStreamId = 0;
-                            wasActive = true;
-                        }
-                    }
-
-                    try
-                    {
-                        transport.Cancel();
-                    }
-                    catch
-                    {
-                    }
-
-                    if (wasActive && IsCurrent(runtime.Generation) && CurrentPhase == SessionPhase.Ready)
-                    {
-                        RaiseEvent(
-                            AudioTransportClosed,
-                            new AudioTransportClosedEventArgs(runtime.SessionId, streamId, ex.Message));
-                    }
-
-                    return;
-                }
-            }
-        }, CancellationToken.None);
-    }
-
     private void StartHeartbeat(SessionRuntime runtime, CancellationToken cancellationToken)
     {
         _ = Task.Run(async () =>
@@ -1136,7 +915,6 @@ public sealed class SessionManager : IDisposable
             var sessionCancellationTokenSource = _sessionCancellationTokenSource;
             _sessionCancellationTokenSource = null;
             sessionCancellationTokenSource?.Cancel();
-            CloseAudioTransport();
             _transportAdapter?.Cancel();
             _transportAdapter?.Dispose();
             _transportAdapter = new TcpSessionTransportAdapter();
@@ -1175,7 +953,6 @@ public sealed class SessionManager : IDisposable
 
         _lastDisconnectReason = reason;
         _sessionCancellationTokenSource?.Cancel();
-        CloseAudioTransport();
         _transportAdapter?.Cancel();
         _runtime?.Close();
         _runtime = null;
@@ -1233,7 +1010,7 @@ public sealed class SessionManager : IDisposable
                 runtime.PeerName,
                 runtime.PeerAddress,
                 ProtocolConstants.Version,
-                ProtocolConstants.AdvertisedCapabilities,
+                AudioProtocol.AdvertisedCapabilitiesForRuntime(),
                 runtime.PeerCapabilities));
     }
 
@@ -1274,12 +1051,6 @@ public sealed class SessionManager : IDisposable
     private ISessionTransportAdapter RequireTransportAdapter()
     {
         return _transportAdapter ?? throw new ObjectDisposedException(nameof(SessionManager));
-    }
-
-    private CancellationTokenSource CreateLinkedAudioToken(CancellationToken cancellationToken)
-    {
-        var sessionToken = _sessionCancellationTokenSource?.Token ?? CancellationToken.None;
-        return CancellationTokenSource.CreateLinkedTokenSource(sessionToken, cancellationToken);
     }
 
     private bool IsCurrent(int expectedGeneration)
@@ -1335,11 +1106,6 @@ public sealed class SessionManager : IDisposable
             transportRole,
             wifiDirectService.LocalIP,
             wifiDirectService.RemoteIP);
-    }
-
-    private static IPAddress ParseAddressOrAny(string? address)
-    {
-        return IPAddress.TryParse(address, out var parsed) ? parsed : IPAddress.Any;
     }
 
     private static IPAddress ParseRequiredAddress(string address, string reason)

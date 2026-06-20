@@ -536,6 +536,15 @@
   <data name="Audio_Encoding_Header.Header" xml:space="preserve">
     <value>Encoding</value>
   </data>
+  <data name="Audio_Latency_Header.Header" xml:space="preserve">
+    <value>Latency</value>
+  </data>
+  <data name="Audio_Latency_Low.Content" xml:space="preserve">
+    <value>Low latency</value>
+  </data>
+  <data name="Audio_Latency_Stable.Content" xml:space="preserve">
+    <value>Stable</value>
+  </data>
   <data name="Audio_Start_Button.Content" xml:space="preserve">
     <value>Start</value>
   </data>
