@@ -24,12 +24,21 @@
   <em>Receive and accept connection invitations directly from an Android device.</em>
 </p>
 
+## What's New in 2.0.1
+
+Version 2.0.1 is the Protocol v2 release. It separates Wi-Fi Direct group-owner/client roles from WDCable TCP listener/connector roles, uses UDP rendezvous when needed, and improves diagnostics for transport setup and handshake failures.
+
+Audio Link now uses RTP/RTCP over UDP with libopus for lower-latency streaming. Senders can choose from Standard (32 kbps), Balanced (64 kbps), High (128 kbps), and Near lossless (256 kbps) quality presets, along with Low latency and Stable latency modes.
+
+> [!IMPORTANT]
+> Protocol v2 is not compatible with Protocol v1. Both devices must run WDCable 2.0.1 or another Protocol v2-compatible build.
+
 ## ✨ Features
 
 - **Connect without network infrastructure** — Link nearby devices directly over Wi-Fi Direct, with no router, hotspot, or internet connection required.
 - **Transfer files quickly** — Send files between Windows and Android with drag-and-drop support and a clear transfer history.
 - **Chat across devices** — Exchange messages with a connected device over the same direct connection.
-- **Stream audio with Audio Link** — Send Windows system audio to Android or stream Android microphone audio to Windows using low-latency Opus encoding.
+- **Stream audio with Audio Link** — Send Windows system audio to Android or stream Android microphone audio to Windows using low-latency RTP/RTCP and Opus encoding, with selectable quality and latency modes.
 - **Measure connection performance** — Run a built-in speed test to check the quality and throughput of the direct link.
 - **Use a native Windows experience** — Work in a modern WinUI 3 interface designed for Windows 10 and Windows 11.
 
@@ -75,7 +84,7 @@
 
 ## 🔗 How It Works
 
-WDCable uses Wi-Fi Direct to establish a peer-to-peer connection between supported devices. Data travels directly between them instead of passing through a router or the internet.
+WDCable uses Wi-Fi Direct to establish a peer-to-peer connection between supported devices. Protocol v2 assigns the WDCable TCP listener to the Wi-Fi Direct client and uses UDP rendezvous when necessary to discover the peer endpoint safely. Data travels directly between the devices instead of passing through a router or the internet.
 
 <p align="center">
   <img src="figures/demonstration.png" width="760" alt="Diagram showing a direct Wi-Fi connection between two devices without a router">
