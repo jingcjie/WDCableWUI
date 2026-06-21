@@ -19,7 +19,17 @@ namespace WDCableWUI.Services
         
         private readonly ApplicationDataContainer _localSettings;
         private readonly DispatcherQueue _dispatcherQueue;
+        private readonly object _historyLock = new();
+        private readonly string _localDataPath;
         private bool _isDisposed = false;
+
+        private const string LegacyChatHistoryKey = "ChatHistory";
+        private const string ChatHistoryFileName = "chat-history.json";
+        private const string FileTransferHistoryFileName = "file-transfer-history.json";
+        private static readonly JsonSerializerOptions HistoryJsonOptions = new()
+        {
+            WriteIndented = true
+        };
         
         // Events
         public event EventHandler<string>? SettingChanged;
@@ -53,6 +63,7 @@ namespace WDCableWUI.Services
         {
             _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
             _localSettings = ApplicationData.Current.LocalSettings;
+            _localDataPath = ApplicationData.Current.LocalFolder.Path;
             
             // Initialize default settings if they don't exist
             InitializeDefaultSettings();
@@ -338,8 +349,12 @@ namespace WDCableWUI.Services
         {
             try
             {
-                var json = JsonSerializer.Serialize(messages.ToList(), new JsonSerializerOptions { WriteIndented = true });
-                _localSettings.Values["ChatHistory"] = json;
+                lock (_historyLock)
+                {
+                    var merged = HistoryDataOperations.MergeChatHistory([], messages);
+                    WriteHistoryFile(ChatHistoryFileName, merged);
+                    RemoveLegacyChatHistory();
+                }
                 OnSettingChanged("ChatHistory");
             }
             catch (Exception ex)
@@ -356,19 +371,34 @@ namespace WDCableWUI.Services
         {
             try
             {
-                var json = _localSettings.Values["ChatHistory"] as string;
-                if (string.IsNullOrEmpty(json))
+                lock (_historyLock)
                 {
-                    return new List<ChatMessageData>();
+                    return LoadChatHistoryLocked();
                 }
-                
-                var messages = JsonSerializer.Deserialize<List<ChatMessageData>>(json);
-                return messages ?? new List<ChatMessageData>();
             }
             catch (Exception ex)
             {
                 OnErrorOccurred($"Failed to load chat history: {ex.Message}");
                 return new List<ChatMessageData>();
+            }
+        }
+
+        public void UpsertChatMessage(ChatMessageData message)
+        {
+            try
+            {
+                lock (_historyLock)
+                {
+                    var messages = LoadChatHistoryLocked();
+                    var merged = HistoryDataOperations.MergeChatHistory(messages, [message]);
+                    WriteHistoryFile(ChatHistoryFileName, merged);
+                    RemoveLegacyChatHistory();
+                }
+                OnSettingChanged("ChatHistory");
+            }
+            catch (Exception ex)
+            {
+                OnErrorOccurred($"Failed to save chat message: {ex.Message}");
             }
         }
         
@@ -379,11 +409,12 @@ namespace WDCableWUI.Services
         {
             try
             {
-                if (_localSettings.Values.ContainsKey("ChatHistory"))
+                lock (_historyLock)
                 {
-                    _localSettings.Values.Remove("ChatHistory");
-                    OnSettingChanged("ChatHistory");
+                    DeleteHistoryFile(ChatHistoryFileName);
+                    RemoveLegacyChatHistory();
                 }
+                OnSettingChanged("ChatHistory");
             }
             catch (Exception ex)
             {
@@ -391,6 +422,60 @@ namespace WDCableWUI.Services
             }
         }
         
+        #endregion
+
+        #region File Transfer History Management
+
+        public List<FileTransferRecordData> LoadFileTransferHistory()
+        {
+            try
+            {
+                lock (_historyLock)
+                {
+                    return ReadHistoryFile<FileTransferRecordData>(FileTransferHistoryFileName);
+                }
+            }
+            catch (Exception ex)
+            {
+                OnErrorOccurred($"Failed to load file transfer history: {ex.Message}");
+                return [];
+            }
+        }
+
+        public void UpsertFileTransferRecord(FileTransferRecordData record)
+        {
+            try
+            {
+                lock (_historyLock)
+                {
+                    var existing = ReadHistoryFile<FileTransferRecordData>(FileTransferHistoryFileName);
+                    var records = HistoryDataOperations.UpsertTransferRecord(existing, record);
+                    WriteHistoryFile(FileTransferHistoryFileName, records);
+                }
+                OnSettingChanged("FileTransferHistory");
+            }
+            catch (Exception ex)
+            {
+                OnErrorOccurred($"Failed to save file transfer history: {ex.Message}");
+            }
+        }
+
+        public void ClearFileTransferHistory()
+        {
+            try
+            {
+                lock (_historyLock)
+                {
+                    DeleteHistoryFile(FileTransferHistoryFileName);
+                }
+                OnSettingChanged("FileTransferHistory");
+            }
+            catch (Exception ex)
+            {
+                OnErrorOccurred($"Failed to clear file transfer history: {ex.Message}");
+            }
+        }
+
         #endregion
         
         #region Speed Test Records Management
@@ -497,16 +582,97 @@ namespace WDCableWUI.Services
         }
         
         #endregion
-    }
-    
-    /// <summary>
-    /// Data structure for persisting chat messages.
-    /// </summary>
-    public class ChatMessageData
-    {
-        public int Type { get; set; } // 0 = Self, 1 = Peer, 2 = System
-        public string Content { get; set; } = string.Empty;
-        public DateTime Timestamp { get; set; }
+
+        private List<ChatMessageData> LoadChatHistoryLocked()
+        {
+            var stored = ReadHistoryFile<ChatMessageData>(ChatHistoryFileName);
+            if (File.Exists(HistoryPath(ChatHistoryFileName)))
+            {
+                return HistoryDataOperations.MergeChatHistory([], stored);
+            }
+
+            var legacyJson = _localSettings.Values[LegacyChatHistoryKey] as string;
+            if (string.IsNullOrWhiteSpace(legacyJson))
+            {
+                return [];
+            }
+
+            var legacy = JsonSerializer.Deserialize<List<ChatMessageData>>(legacyJson, HistoryJsonOptions) ?? [];
+            var migrated = HistoryDataOperations.MergeChatHistory([], legacy);
+            WriteHistoryFile(ChatHistoryFileName, migrated);
+            RemoveLegacyChatHistory();
+            return migrated;
+        }
+
+        private List<T> ReadHistoryFile<T>(string fileName)
+        {
+            var path = HistoryPath(fileName);
+            if (!File.Exists(path))
+            {
+                return [];
+            }
+
+            using var stream = File.OpenRead(path);
+            return JsonSerializer.Deserialize<List<T>>(stream, HistoryJsonOptions) ?? [];
+        }
+
+        private void WriteHistoryFile<T>(string fileName, IReadOnlyCollection<T> values)
+        {
+            Directory.CreateDirectory(_localDataPath);
+            var path = HistoryPath(fileName);
+            var temporaryPath = $"{path}.{Guid.NewGuid():N}.tmp";
+
+            try
+            {
+                using (var stream = new FileStream(
+                           temporaryPath,
+                           FileMode.CreateNew,
+                           FileAccess.Write,
+                           FileShare.None))
+                {
+                    JsonSerializer.Serialize(stream, values, HistoryJsonOptions);
+                    stream.Flush(flushToDisk: true);
+                }
+
+                if (File.Exists(path))
+                {
+                    File.Replace(temporaryPath, path, destinationBackupFileName: null);
+                }
+                else
+                {
+                    File.Move(temporaryPath, path);
+                }
+            }
+            finally
+            {
+                if (File.Exists(temporaryPath))
+                {
+                    File.Delete(temporaryPath);
+                }
+            }
+        }
+
+        private void DeleteHistoryFile(string fileName)
+        {
+            var path = HistoryPath(fileName);
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+
+        private string HistoryPath(string fileName)
+        {
+            return Path.Combine(_localDataPath, fileName);
+        }
+
+        private void RemoveLegacyChatHistory()
+        {
+            if (_localSettings.Values.ContainsKey(LegacyChatHistoryKey))
+            {
+                _localSettings.Values.Remove(LegacyChatHistoryKey);
+            }
+        }
     }
     
     /// <summary>

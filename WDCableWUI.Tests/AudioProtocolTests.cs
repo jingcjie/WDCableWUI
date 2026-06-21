@@ -127,6 +127,24 @@ public sealed class AudioProtocolTests
     }
 
     [TestMethod]
+    public void SenderEncodingOptionsUseTheExistingQualityBitrates()
+    {
+        Assert.AreEqual(4, AudioProtocol.QualityBitrates.Count);
+        Assert.AreEqual(
+            AudioProtocol.BitrateStandardBps,
+            AudioProtocol.BitrateForQualityMode(AudioProtocol.QualityStandard));
+        Assert.AreEqual(
+            AudioProtocol.BitrateBalancedBps,
+            AudioProtocol.BitrateForQualityMode(AudioProtocol.QualityBalanced));
+        Assert.AreEqual(
+            AudioProtocol.BitrateHighBps,
+            AudioProtocol.BitrateForQualityMode(AudioProtocol.QualityHigh));
+        Assert.AreEqual(
+            AudioProtocol.BitrateNearLosslessBps,
+            AudioProtocol.BitrateForQualityMode(AudioProtocol.QualityNearLossless));
+    }
+
+    [TestMethod]
     public void QualityValidationRejectsUnknownUnsupportedAndMismatchedPairs()
     {
         Assert.IsFalse(AudioProtocol.IsCompatibleOffer(

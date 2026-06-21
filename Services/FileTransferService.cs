@@ -621,11 +621,25 @@ namespace WDCableWUI.Services
 
         private void OnFileReceived(string fileName, string filePath, long fileSize, string transferId)
         {
+            PersistTerminalRecord(
+                transferId,
+                fileName,
+                filePath,
+                fileSize,
+                isSender: false,
+                status: "Received");
             RaiseOnDispatcher(() => FileReceived?.Invoke(this, new FileTransferEventArgs(fileName, filePath, fileSize, transferId)));
         }
 
         private void OnFileSent(string fileName, string filePath, long fileSize, string transferId)
         {
+            PersistTerminalRecord(
+                transferId,
+                fileName,
+                filePath,
+                fileSize,
+                isSender: true,
+                status: "Sent");
             RaiseOnDispatcher(() => FileSent?.Invoke(this, new FileTransferEventArgs(fileName, filePath, fileSize, transferId)));
         }
 
@@ -641,7 +655,37 @@ namespace WDCableWUI.Services
 
         private void OnTransferFailed(string fileName, string filePath, long fileSize, string transferId, bool isSender, string errorMessage)
         {
+            PersistTerminalRecord(
+                transferId,
+                fileName,
+                filePath,
+                fileSize,
+                isSender,
+                status: "Failed",
+                errorMessage);
             RaiseOnDispatcher(() => TransferFailed?.Invoke(this, new FileTransferFailedEventArgs(fileName, filePath, fileSize, transferId, isSender, errorMessage)));
+        }
+
+        private static void PersistTerminalRecord(
+            string transferId,
+            string fileName,
+            string filePath,
+            long fileSize,
+            bool isSender,
+            string status,
+            string? errorMessage = null)
+        {
+            ServiceManager.DataManager?.UpsertFileTransferRecord(new FileTransferRecordData
+            {
+                TransferId = transferId,
+                FileName = fileName,
+                FilePath = filePath,
+                FileSize = fileSize,
+                IsSender = isSender,
+                Status = status,
+                Timestamp = DateTime.Now,
+                ErrorMessage = errorMessage
+            });
         }
 
         private void RaiseOnDispatcher(Action action)

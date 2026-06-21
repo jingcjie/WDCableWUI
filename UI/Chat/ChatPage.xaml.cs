@@ -6,7 +6,6 @@ using Microsoft.UI.Xaml.Navigation;
 using System;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
-using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using WDCableWUI.Services;
@@ -29,6 +28,8 @@ namespace WDCableWUI.UI.Chat
         private string _content = string.Empty;
         private MessageType _type;
         private DateTime _timestamp;
+
+        public string? MessageId { get; set; }
         
         public string Content
         {
@@ -90,7 +91,6 @@ namespace WDCableWUI.UI.Chat
             _dataManager = DataManager.Instance;
             Unloaded += OnPageUnloaded;
             
-            // Load chat history on initialization
             LoadChatHistory();
         }
 
@@ -103,6 +103,7 @@ namespace WDCableWUI.UI.Chat
                 // Access ChatService through ServiceManager with null checks
                 _chatService = ServiceManager.AreWiFiDirectServicesAvailable ? ServiceManager.ChatService : null;
                 SubscribeToChatEvents();
+                LoadChatHistory();
             }
             catch (Exception ex)
             {
@@ -116,9 +117,6 @@ namespace WDCableWUI.UI.Chat
         protected override void OnNavigatedFrom(NavigationEventArgs e)
         {
             base.OnNavigatedFrom(e);
-            
-            // Save chat history when navigating away
-            SaveChatHistory();
             
             UnsubscribeFromChatEvents();
         }
@@ -134,7 +132,7 @@ namespace WDCableWUI.UI.Chat
 
             _chatService.StatusChanged += OnChatServiceStatusChanged;
             _chatService.ErrorOccurred += OnChatServiceErrorOccurred;
-            _chatService.MessageReceived += OnMessageReceived;
+            _chatService.ChatMessageReceived += OnMessageReceived;
             _subscribedChatService = _chatService;
         }
 
@@ -147,13 +145,12 @@ namespace WDCableWUI.UI.Chat
 
             _subscribedChatService.StatusChanged -= OnChatServiceStatusChanged;
             _subscribedChatService.ErrorOccurred -= OnChatServiceErrorOccurred;
-            _subscribedChatService.MessageReceived -= OnMessageReceived;
+            _subscribedChatService.ChatMessageReceived -= OnMessageReceived;
             _subscribedChatService = null;
         }
 
         private void OnPageUnloaded(object sender, RoutedEventArgs e)
         {
-            SaveChatHistory();
             UnsubscribeFromChatEvents();
         }
         
@@ -205,29 +202,7 @@ namespace WDCableWUI.UI.Chat
         }
         
         /// <summary>
-        /// Saves the current chat history to persistent storage.
-        /// </summary>
-        private void SaveChatHistory()
-        {
-            try
-            {
-                var chatData = _messages.Select(m => new ChatMessageData
-                {
-                    Type = (int)m.Type,
-                    Content = m.Content,
-                    Timestamp = m.Timestamp
-                }).ToList();
-                
-                _dataManager.SaveChatHistory(chatData);
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"Failed to save chat history: {ex.Message}");
-            }
-        }
-        
-        /// <summary>
-        /// Loads chat history from persistent storage and displays it.
+        /// Merges chat history from persistent storage into the current page.
         /// </summary>
         private void LoadChatHistory()
         {
@@ -237,8 +212,14 @@ namespace WDCableWUI.UI.Chat
                 
                 foreach (var data in chatData)
                 {
+                    if (ContainsMessage(data.MessageId, data.Type, data.Content, data.Timestamp))
+                    {
+                        continue;
+                    }
+
                     var message = new ChatMessage
                     {
+                        MessageId = data.MessageId,
                         Type = (ChatMessage.MessageType)data.Type,
                         Content = data.Content,
                         Timestamp = data.Timestamp
@@ -299,30 +280,56 @@ namespace WDCableWUI.UI.Chat
             UpdateConnectionStatus();
         }
         
-        private void OnMessageReceived(object? sender, string message)
+        private void OnMessageReceived(object? sender, ChatMessageReceivedEventArgs e)
         {
-            AddPeerMessage(message);
+            AddPeerMessage(
+                e.Message.Message,
+                e.Message.MessageId,
+                e.Message.Timestamp.LocalDateTime);
         }
         
-        private void AddMessage(ChatMessage.MessageType type, string content)
+        private void AddMessage(
+            ChatMessage.MessageType type,
+            string content,
+            string? messageId = null,
+            DateTime? timestamp = null,
+            bool persist = true)
         {
             var message = new ChatMessage
             {
+                MessageId = messageId ?? Guid.NewGuid().ToString(),
                 Type = type,
                 Content = content,
-                Timestamp = DateTime.Now
+                Timestamp = timestamp ?? DateTime.Now
             };
+
+            if (persist)
+            {
+                _dataManager.UpsertChatMessage(new ChatMessageData
+                {
+                    MessageId = message.MessageId,
+                    Type = (int)message.Type,
+                    Content = message.Content,
+                    Timestamp = message.Timestamp
+                });
+            }
             
             _dispatcherQueue.TryEnqueue(() =>
             {
+                if (ContainsMessage(
+                        message.MessageId,
+                        (int)message.Type,
+                        message.Content,
+                        message.Timestamp))
+                {
+                    return;
+                }
+
                 _messages.Add(message);
                 
                 // Create UI element for the message
                 var messageElement = CreateMessageElement(message);
                 MessagesItemsControl.Items.Add(messageElement);
-                
-                // Auto-save chat history after adding new message
-                SaveChatHistory();
                 
                 // Hide empty state when first message is added
                 if (_messages.Count == 1)
@@ -383,14 +390,37 @@ namespace WDCableWUI.UI.Chat
             AddMessage(ChatMessage.MessageType.System, content);
         }
         
-        private void AddSelfMessage(string content)
+        private void AddSelfMessage(string content, string? messageId, DateTime timestamp)
         {
-            AddMessage(ChatMessage.MessageType.Self, content);
+            AddMessage(ChatMessage.MessageType.Self, content, messageId, timestamp, persist: false);
         }
-        
-        private void AddPeerMessage(string content)
+
+        private void AddPeerMessage(string content, string messageId, DateTime timestamp)
         {
-            AddMessage(ChatMessage.MessageType.Peer, content);
+            AddMessage(ChatMessage.MessageType.Peer, content, messageId, timestamp, persist: false);
+        }
+
+        private bool ContainsMessage(string? messageId, int type, string content, DateTime timestamp)
+        {
+            foreach (var existing in _messages)
+            {
+                if (!string.IsNullOrWhiteSpace(messageId) &&
+                    string.Equals(existing.MessageId, messageId, StringComparison.Ordinal))
+                {
+                    return true;
+                }
+
+                if (string.IsNullOrWhiteSpace(messageId) &&
+                    string.IsNullOrWhiteSpace(existing.MessageId) &&
+                    (int)existing.Type == type &&
+                    existing.Timestamp == timestamp &&
+                    existing.Content == content)
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
         
         private void ScrollToBottom()
@@ -425,7 +455,10 @@ namespace WDCableWUI.UI.Chat
                 var result = await _chatService.SendMessageAsync(messageText);
                 if (result.Success)
                 {
-                    AddSelfMessage(messageText);
+                    AddSelfMessage(
+                        messageText,
+                        result.MessageId,
+                        result.Timestamp?.LocalDateTime ?? DateTime.Now);
                     MessageTextBox.Text = string.Empty;
                 }
                 else

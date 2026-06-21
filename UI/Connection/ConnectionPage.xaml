@@ -131,11 +131,6 @@
                                               x:Uid="Connection_Status_NotConnected"
                                               Style="{StaticResource BodyTextBlockStyle}"
                                               TextWrapping="Wrap"/>
-                                    <TextBlock x:Name="DeviceRoleText"
-                                              Text=""
-                                              Style="{StaticResource CaptionTextBlockStyle}"
-                                              Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                              TextWrapping="Wrap"/>
                                     <TextBlock x:Name="LastStatusText"
                                               Text=""
                                               Style="{StaticResource CaptionTextBlockStyle}"

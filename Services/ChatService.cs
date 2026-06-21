@@ -81,6 +81,13 @@ namespace WDCableWUI.Services
                     timestamp);
 
                 await _sessionManager.SendControlFrameAsync(frame, cancellationToken).ConfigureAwait(false);
+                ServiceManager.DataManager?.UpsertChatMessage(new ChatMessageData
+                {
+                    MessageId = messageId.ToString(),
+                    Type = 0,
+                    Content = message,
+                    Timestamp = timestamp.LocalDateTime
+                });
                 OnStatusChanged("Message sent");
                 return new ChatSendResult(true, messageId.ToString(), timestamp);
             }
@@ -176,6 +183,14 @@ namespace WDCableWUI.Services
             {
                 return;
             }
+
+            ServiceManager.DataManager?.UpsertChatMessage(new ChatMessageData
+            {
+                MessageId = chatMessage.MessageId,
+                Type = 1,
+                Content = chatMessage.Message,
+                Timestamp = chatMessage.Timestamp.LocalDateTime
+            });
 
             RaiseOnDispatcher(() =>
             {

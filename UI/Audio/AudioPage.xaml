@@ -68,7 +68,6 @@
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
                                 </Grid.RowDefinitions>
 
                                 <ComboBox x:Name="ModeComboBox"
@@ -98,8 +97,11 @@
                                           x:Uid="Audio_Encoding_Header"
                                           SelectedIndex="0"
                                           HorizontalAlignment="Stretch"
-                                          IsEnabled="False">
-                                    <ComboBoxItem x:Name="EncodingOptionItem" Content="Opus 32 kbps" Tag="opus"/>
+                                          SelectionChanged="EncodingComboBox_SelectionChanged">
+                                    <ComboBoxItem x:Uid="Audio_Encoding_Opus32" Tag="standard"/>
+                                    <ComboBoxItem x:Uid="Audio_Encoding_Opus64" Tag="balanced"/>
+                                    <ComboBoxItem x:Uid="Audio_Encoding_Opus128" Tag="high"/>
+                                    <ComboBoxItem x:Uid="Audio_Encoding_Opus256" Tag="nearLossless"/>
                                 </ComboBox>
 
                                 <ComboBox x:Name="LatencyComboBox"
@@ -113,21 +115,7 @@
                                     <ComboBoxItem x:Uid="Audio_Latency_Stable" Tag="stable"/>
                                 </ComboBox>
 
-                                <ComboBox x:Name="QualityComboBox"
-                                          Grid.Row="1"
-                                          Grid.Column="0"
-                                          Grid.ColumnSpan="2"
-                                          x:Uid="Audio_Quality_Header"
-                                          SelectedIndex="0"
-                                          HorizontalAlignment="Stretch"
-                                          SelectionChanged="QualityComboBox_SelectionChanged">
-                                    <ComboBoxItem x:Uid="Audio_Quality_Standard" Tag="standard"/>
-                                    <ComboBoxItem x:Uid="Audio_Quality_Balanced" Tag="balanced"/>
-                                    <ComboBoxItem x:Uid="Audio_Quality_High" Tag="high"/>
-                                    <ComboBoxItem x:Uid="Audio_Quality_NearLossless" Tag="nearLossless"/>
-                                </ComboBox>
-
-                                <StackPanel Grid.Row="2" Grid.ColumnSpan="4" Orientation="Horizontal" Spacing="8">
+                                <StackPanel Grid.Row="1" Grid.ColumnSpan="4" Orientation="Horizontal" Spacing="8">
                                     <Button x:Name="StartButton"
                                             x:Uid="Audio_Start_Button"
                                             Style="{StaticResource AccentButtonStyle}"

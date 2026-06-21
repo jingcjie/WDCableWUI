@@ -536,6 +536,18 @@
   <data name="Audio_Encoding_Header.Header" xml:space="preserve">
     <value>Encoding</value>
   </data>
+  <data name="Audio_Encoding_Opus32.Content" xml:space="preserve">
+    <value>Opus 32 kbps</value>
+  </data>
+  <data name="Audio_Encoding_Opus64.Content" xml:space="preserve">
+    <value>Opus 64 kbps</value>
+  </data>
+  <data name="Audio_Encoding_Opus128.Content" xml:space="preserve">
+    <value>Opus 128 kbps</value>
+  </data>
+  <data name="Audio_Encoding_Opus256.Content" xml:space="preserve">
+    <value>Opus 256 kbps</value>
+  </data>
   <data name="Audio_Latency_Header.Header" xml:space="preserve">
     <value>Latency</value>
   </data>

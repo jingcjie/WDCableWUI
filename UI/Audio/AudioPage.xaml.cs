@@ -16,6 +16,7 @@ public sealed partial class AudioPage : Page
     private SessionManager? _sessionManager;
     private SessionManager? _subscribedSessionManager;
     private bool _controlsReady;
+    private bool _restoringServiceState;
 
     public AudioPage()
     {
@@ -25,7 +26,6 @@ public sealed partial class AudioPage : Page
         UpdateControlsForMode();
         SelectLatencyMode(_audioService?.LatencyMode ?? AudioProtocol.LatencyModeLow);
         SelectQualityMode(_audioService?.QualityMode ?? AudioProtocol.QualityStandard);
-        UpdateEncodingDisplay();
         StateText.Text = StateDisplayName(AudioService.StateIdle);
         StateDetailsText.Text = "Audio Link is idle";
     }
@@ -38,6 +38,7 @@ public sealed partial class AudioPage : Page
             InitializeServices();
             SubscribeToServiceEvents();
             UpdateConnectionStatus();
+            RestoreServiceSnapshot();
             UpdateButtonStates();
         }
         catch (Exception ex)
@@ -61,7 +62,6 @@ public sealed partial class AudioPage : Page
             _sessionManager = ServiceManager.AreWiFiDirectServicesAvailable ? ServiceManager.SessionManager : null;
             SelectLatencyMode(_audioService?.LatencyMode ?? AudioProtocol.LatencyModeLow);
             SelectQualityMode(_audioService?.QualityMode ?? AudioProtocol.QualityStandard);
-            UpdateEncodingDisplay();
         }
         catch
         {
@@ -192,6 +192,7 @@ public sealed partial class AudioPage : Page
             InitializeServices();
             SubscribeToServiceEvents();
             UpdateConnectionStatus();
+            RestoreServiceSnapshot();
             UpdateButtonStates();
         }
         catch (Exception ex)
@@ -203,7 +204,7 @@ public sealed partial class AudioPage : Page
 
     private void ModeComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (!_controlsReady)
+        if (!_controlsReady || _restoringServiceState)
         {
             return;
         }
@@ -214,7 +215,7 @@ public sealed partial class AudioPage : Page
 
     private void LatencyComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (!_controlsReady)
+        if (!_controlsReady || _restoringServiceState)
         {
             return;
         }
@@ -226,9 +227,9 @@ public sealed partial class AudioPage : Page
         UpdateButtonStates();
     }
 
-    private void QualityComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    private void EncodingComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (!_controlsReady)
+        if (!_controlsReady || _restoringServiceState)
         {
             return;
         }
@@ -238,7 +239,6 @@ public sealed partial class AudioPage : Page
             _audioService?.SetQualityMode(SelectedQualityMode());
         }
 
-        UpdateEncodingDisplay();
         UpdateButtonStates();
     }
 
@@ -246,10 +246,7 @@ public sealed partial class AudioPage : Page
     {
         DispatcherQueue.TryEnqueue(() =>
         {
-            StateText.Text = StateDisplayName(e.State);
-            StateDetailsText.Text = e.Message;
-            UpdateStateIcon(e.State);
-            ShowInfo(e.Message, InfoBarSeverity.Informational);
+            ApplyAudioState(e, showInfo: true);
             UpdateButtonStates();
         });
     }
@@ -258,23 +255,7 @@ public sealed partial class AudioPage : Page
     {
         DispatcherQueue.TryEnqueue(() =>
         {
-            LatencyText.Text = DisplayLatencyMode(e.LatencyMode);
-            QualityText.Text = DisplayQualityMode(e.QualityMode);
-            ConfiguredBitrateText.Text = FormatBitrate(e.ConfiguredBitrateBps);
-            BitrateText.Text = FormatBitrate(e.BitrateBps);
-            BufferText.Text = $"{e.BufferLevelMs} ms";
-            FramesSentText.Text = e.FramesSent.ToString();
-            FramesReceivedText.Text = e.FramesReceived.ToString();
-            DroppedText.Text = e.DroppedFrames.ToString();
-            UnderflowText.Text = e.UnderflowCount.ToString();
-            PacketLossText.Text = e.PacketLossCount.ToString();
-            LateDropsText.Text = e.LatePacketDrops.ToString();
-            OverflowDropsText.Text = e.OverflowDrops.ToString();
-            PlcText.Text = e.PlcCount.ToString();
-            RtcpLossText.Text = FormatFractionLost(e.RtcpFractionLost);
-            RtcpJitterText.Text = FormatRtpJitter(e.RtcpJitter == 0 ? e.LocalJitter : e.RtcpJitter);
-            RttText.Text = e.LatencyMs >= 0 ? $"{e.LatencyMs} ms" : "-";
-            UpdateEncodingDisplay(e.ConfiguredBitrateBps);
+            ApplyAudioStats(e);
         });
     }
 
@@ -380,7 +361,7 @@ public sealed partial class AudioPage : Page
         var isSendMode = SelectedMode() == AudioService.ModeSend;
         SourceComboBox.IsEnabled = !active && isSendMode;
         LatencyComboBox.IsEnabled = !active && isSendMode;
-        QualityComboBox.IsEnabled = !active && isSendMode;
+        EncodingComboBox.IsEnabled = !active && isSendMode;
     }
 
     private void UpdateControlsForMode()
@@ -403,8 +384,7 @@ public sealed partial class AudioPage : Page
 
         var senderVisibility = isSendMode ? Visibility.Visible : Visibility.Collapsed;
         LatencyComboBox.Visibility = senderVisibility;
-        QualityComboBox.Visibility = senderVisibility;
-        UpdateEncodingDisplay();
+        EncodingComboBox.Visibility = senderVisibility;
     }
 
     private string SelectedMode()
@@ -423,7 +403,7 @@ public sealed partial class AudioPage : Page
 
     private string SelectedQualityMode()
     {
-        return AudioProtocol.NormalizeQualityMode((QualityComboBox.SelectedItem as ComboBoxItem)?.Tag?.ToString());
+        return AudioProtocol.NormalizeQualityMode((EncodingComboBox.SelectedItem as ComboBoxItem)?.Tag?.ToString());
     }
 
     private void SelectLatencyMode(string latencyMode)
@@ -445,7 +425,7 @@ public sealed partial class AudioPage : Page
             return;
         }
 
-        QualityComboBox.SelectedIndex = AudioProtocol.NormalizeQualityMode(qualityMode) switch
+        EncodingComboBox.SelectedIndex = AudioProtocol.NormalizeQualityMode(qualityMode) switch
         {
             AudioProtocol.QualityBalanced => 1,
             AudioProtocol.QualityHigh => 2,
@@ -454,17 +434,89 @@ public sealed partial class AudioPage : Page
         };
     }
 
-    private void UpdateEncodingDisplay(int? activeConfiguredBitrateBps = null)
+    private void RestoreServiceSnapshot()
     {
-        if (!_controlsReady)
+        var snapshot = _audioService?.GetSnapshot();
+        if (snapshot == null)
         {
             return;
         }
 
-        var bitrateBps = SelectedMode() == AudioService.ModeSend
-            ? AudioProtocol.BitrateForQualityMode(SelectedQualityMode())
-            : activeConfiguredBitrateBps.GetValueOrDefault(AudioProtocol.BitrateBps);
-        EncodingOptionItem.Content = $"Opus {FormatBitrate(bitrateBps)}";
+        ApplyAudioState(snapshot.State, showInfo: snapshot.State.State != AudioService.StateIdle);
+        if (snapshot.LatestStats != null)
+        {
+            ApplyAudioStats(snapshot.LatestStats);
+        }
+    }
+
+    private void ApplyAudioState(AudioStateChangedEventArgs state, bool showInfo)
+    {
+        _restoringServiceState = true;
+        try
+        {
+            if (state.Mode == AudioService.ModeSend)
+            {
+                ModeComboBox.SelectedIndex = 0;
+            }
+            else if (state.Mode == AudioService.ModeReceive)
+            {
+                ModeComboBox.SelectedIndex = 1;
+            }
+
+            SelectLatencyMode(state.LatencyMode);
+            SelectQualityMode(state.QualityMode);
+            UpdateControlsForMode();
+        }
+        finally
+        {
+            _restoringServiceState = false;
+        }
+
+        StateText.Text = StateDisplayName(state.State);
+        if (state.State != AudioService.StateIdle ||
+            !string.Equals(state.Message, "Audio Link is idle", StringComparison.Ordinal))
+        {
+            StateDetailsText.Text = state.Message;
+        }
+        UpdateStateIcon(state.State);
+        if (showInfo)
+        {
+            ShowInfo(
+                state.Message,
+                state.State == AudioService.StateStreaming
+                    ? InfoBarSeverity.Success
+                    : InfoBarSeverity.Informational);
+        }
+    }
+
+    private void ApplyAudioStats(AudioStatsEventArgs stats)
+    {
+        _restoringServiceState = true;
+        try
+        {
+            SelectLatencyMode(stats.LatencyMode);
+            SelectQualityMode(stats.QualityMode);
+        }
+        finally
+        {
+            _restoringServiceState = false;
+        }
+        LatencyText.Text = DisplayLatencyMode(stats.LatencyMode);
+        QualityText.Text = DisplayQualityMode(stats.QualityMode);
+        ConfiguredBitrateText.Text = FormatBitrate(stats.ConfiguredBitrateBps);
+        BitrateText.Text = FormatBitrate(stats.BitrateBps);
+        BufferText.Text = $"{stats.BufferLevelMs} ms";
+        FramesSentText.Text = stats.FramesSent.ToString();
+        FramesReceivedText.Text = stats.FramesReceived.ToString();
+        DroppedText.Text = stats.DroppedFrames.ToString();
+        UnderflowText.Text = stats.UnderflowCount.ToString();
+        PacketLossText.Text = stats.PacketLossCount.ToString();
+        LateDropsText.Text = stats.LatePacketDrops.ToString();
+        OverflowDropsText.Text = stats.OverflowDrops.ToString();
+        PlcText.Text = stats.PlcCount.ToString();
+        RtcpLossText.Text = FormatFractionLost(stats.RtcpFractionLost);
+        RtcpJitterText.Text = FormatRtpJitter(stats.RtcpJitter == 0 ? stats.LocalJitter : stats.RtcpJitter);
+        RttText.Text = stats.LatencyMs >= 0 ? $"{stats.LatencyMs} ms" : "-";
     }
 
     private void UpdateStateIcon(string state)

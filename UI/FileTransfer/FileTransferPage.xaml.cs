@@ -134,6 +134,7 @@ namespace WDCableWUI.UI.FileTransfer
             InitializeCollections();
             InitializeDefaultSettings();
             InitializeFileTransferService();
+            LoadTransferHistory();
             Unloaded += OnPageUnloaded;
         }
 
@@ -241,6 +242,7 @@ namespace WDCableWUI.UI.FileTransfer
             base.OnNavigatedTo(e);
             InitializeFileTransferService();
             SubscribeToFileTransferEvents();
+            LoadTransferHistory();
             UpdateSendButtonState();
         }
 
@@ -478,6 +480,7 @@ namespace WDCableWUI.UI.FileTransfer
                 _transferRecords.Clear();
                 _filteredRecords.Clear();
                 _activeTransferRecords.Clear();
+                DataManager.Instance.ClearFileTransferHistory();
             }
         }
 
@@ -530,16 +533,16 @@ namespace WDCableWUI.UI.FileTransfer
 
         private void OnFileSent(object? sender, FileTransferEventArgs e)
         {
-            var transferRecord = GetOrCreateTransferRecord(e.TransferId, e.FileName, isSender: true);
-            transferRecord.FileName = e.FileName;
-            transferRecord.FilePath = e.FilePath;
-            transferRecord.Status = "Sent";
-            transferRecord.TimeStamp = DateTime.Now.ToString("HH:mm");
-            transferRecord.StatusColor = new SolidColorBrush(Colors.Green);
-            transferRecord.Progress = 100;
-            transferRecord.ProgressVisibility = Visibility.Visible;
-            _activeTransferRecords.Remove(TransferKey(e.TransferId, e.FileName, isSender: true));
-            ApplyFilter();
+            ApplyTerminalRecord(new FileTransferRecordData
+            {
+                TransferId = e.TransferId,
+                FileName = e.FileName,
+                FilePath = e.FilePath,
+                FileSize = e.FileSize,
+                IsSender = true,
+                Status = "Sent",
+                Timestamp = DateTime.Now
+            }, moveToFront: true);
         }
 
         private void OnFileReceiveStarted(object? sender, FileReceiveStartedEventArgs e)
@@ -555,16 +558,16 @@ namespace WDCableWUI.UI.FileTransfer
 
         private void OnFileReceived(object? sender, FileTransferEventArgs e)
         {
-            var transferRecord = GetOrCreateTransferRecord(e.TransferId, e.FileName, isSender: false);
-            transferRecord.FileName = e.FileName;
-            transferRecord.FilePath = e.FilePath;
-            transferRecord.Status = "Received";
-            transferRecord.TimeStamp = DateTime.Now.ToString("HH:mm");
-            transferRecord.StatusColor = new SolidColorBrush(Colors.Green);
-            transferRecord.Progress = 100;
-            transferRecord.ProgressVisibility = Visibility.Visible;
-            _activeTransferRecords.Remove(TransferKey(e.TransferId, e.FileName, isSender: false));
-            ApplyFilter();
+            ApplyTerminalRecord(new FileTransferRecordData
+            {
+                TransferId = e.TransferId,
+                FileName = e.FileName,
+                FilePath = e.FilePath,
+                FileSize = e.FileSize,
+                IsSender = false,
+                Status = "Received",
+                Timestamp = DateTime.Now
+            }, moveToFront: true);
         }
 
         private void OnTransferProgress(object? sender, FileTransferProgressEventArgs e)
@@ -580,15 +583,80 @@ namespace WDCableWUI.UI.FileTransfer
 
         private void OnTransferFailed(object? sender, FileTransferFailedEventArgs e)
         {
-            var transferRecord = GetOrCreateTransferRecord(e.TransferId, e.FileName, e.IsSender);
-            transferRecord.FileName = e.FileName;
-            transferRecord.FilePath = string.Empty;
-            transferRecord.Status = "Failed";
-            transferRecord.TimeStamp = DateTime.Now.ToString("HH:mm");
-            transferRecord.StatusColor = new SolidColorBrush(Colors.Firebrick);
+            ApplyTerminalRecord(new FileTransferRecordData
+            {
+                TransferId = e.TransferId,
+                FileName = e.FileName,
+                FilePath = e.FilePath,
+                FileSize = e.FileSize,
+                IsSender = e.IsSender,
+                Status = "Failed",
+                Timestamp = DateTime.Now,
+                ErrorMessage = e.ErrorMessage
+            }, moveToFront: true);
+        }
+
+        private void LoadTransferHistory()
+        {
+            try
+            {
+                foreach (var record in DataManager.Instance.LoadFileTransferHistory())
+                {
+                    ApplyTerminalRecord(record, moveToFront: false, applyFilter: false);
+                }
+
+                ApplyFilter();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Failed to load transfer history: {ex.Message}");
+            }
+        }
+
+        private void ApplyTerminalRecord(
+            FileTransferRecordData data,
+            bool moveToFront,
+            bool applyFilter = true)
+        {
+            var key = TransferKey(data.TransferId, data.FileName, data.IsSender);
+            var transferRecord = _transferRecords.FirstOrDefault(record =>
+                TransferKey(record.TransferId, record.FileName, record.Type == TransferType.Sent) == key);
+
+            if (transferRecord == null)
+            {
+                transferRecord = new TransferRecord();
+                if (moveToFront)
+                {
+                    _transferRecords.Insert(0, transferRecord);
+                }
+                else
+                {
+                    _transferRecords.Add(transferRecord);
+                }
+            }
+            else if (moveToFront)
+            {
+                _transferRecords.Remove(transferRecord);
+                _transferRecords.Insert(0, transferRecord);
+            }
+
+            transferRecord.TransferId = data.TransferId;
+            transferRecord.FileName = data.FileName;
+            transferRecord.FilePath = data.Status == "Failed" ? string.Empty : data.FilePath;
+            transferRecord.Status = data.Status;
+            transferRecord.TimeStamp = data.Timestamp.ToString("g");
+            transferRecord.TypeIcon = data.IsSender ? "\uE724" : "\uE896";
+            transferRecord.StatusColor = new SolidColorBrush(
+                data.Status == "Failed" ? Colors.Firebrick : Colors.Green);
+            transferRecord.Progress = data.Status == "Failed" ? transferRecord.Progress : 100;
             transferRecord.ProgressVisibility = Visibility.Visible;
-            _activeTransferRecords.Remove(TransferKey(e.TransferId, e.FileName, e.IsSender));
-            ApplyFilter();
+            transferRecord.Type = data.IsSender ? TransferType.Sent : TransferType.Received;
+            _activeTransferRecords.Remove(key);
+
+            if (applyFilter)
+            {
+                ApplyFilter();
+            }
         }
 
         private TransferRecord GetOrCreateTransferRecord(string transferId, string fileName, bool isSender)

@@ -263,7 +263,8 @@ namespace WDCableWUI.UI.Connection
         private void OnDeviceConnected(object? sender, WiFiDirectDevice device)
         {
             _dispatcherQueue.TryEnqueue(() => {
-                UpdateConnectionStatus($"Connected to {device.Name}", GetRoleDiagnostics());
+                UpdateConnectionStatus($"Connected to {device.Name}");
+                LastStatusText.Text = "WiFi Direct service ready";
                 DisconnectButton.IsEnabled = true;
                 ScanButton.IsEnabled = !(_wifiDirectService?.IsScanning ?? false);
                 StopScanButton.IsEnabled = _wifiDirectService?.IsScanning ?? false;
@@ -273,7 +274,7 @@ namespace WDCableWUI.UI.Connection
         private void OnDeviceDisconnected(object? sender, EventArgs e)
         {
             _dispatcherQueue.TryEnqueue(() => {
-                UpdateConnectionStatus("Not connected", "");
+                UpdateConnectionStatus("Not connected");
                 DisconnectButton.IsEnabled = false;
             });
         }
@@ -281,13 +282,18 @@ namespace WDCableWUI.UI.Connection
         private void OnStatusChanged(object? sender, string status)
         {
             _dispatcherQueue.TryEnqueue(() => {
-                LastStatusText.Text = status;
                 UpdateDiscoverabilityStatus();
-                if (_wifiDirectService?.IsConnected == true &&
-                    (status.Contains("Role") || status.Contains("endpoint") || status.Contains("Connected")))
+
+                // Connection setup diagnostics can contain IP addresses and transport
+                // roles. Keep those details in the service diagnostics instead of
+                // presenting them in the user-facing connection page.
+                LastStatusText.Text = _wifiDirectService?.CurrentState switch
                 {
-                    DeviceRoleText.Text = GetRoleDiagnostics();
-                }
+                    WiFiDirectServiceState.ConnectingOutbound or
+                    WiFiDirectServiceState.ConnectingInbound => "Connecting...",
+                    WiFiDirectServiceState.Connected => "WiFi Direct service ready",
+                    _ => status
+                };
             });
         }
 
@@ -326,10 +332,9 @@ namespace WDCableWUI.UI.Connection
             }
         }
 
-        private void UpdateConnectionStatus(string status, string role)
+        private void UpdateConnectionStatus(string status)
         {
             ConnectionStatusText.Text = status;
-            DeviceRoleText.Text = role;
         }
 
         private void UpdateUI()
@@ -349,12 +354,12 @@ namespace WDCableWUI.UI.Connection
             // Update connection status
             if (_wifiDirectService?.IsConnected == true)
             {
-                UpdateConnectionStatus($"Connected to {_wifiDirectService?.ConnectedDevice?.Name}",
-                    GetRoleDiagnostics());
+                UpdateConnectionStatus($"Connected to {_wifiDirectService?.ConnectedDevice?.Name}");
+                LastStatusText.Text = "WiFi Direct service ready";
             }
             else
             {
-                UpdateConnectionStatus("Not connected", "");
+                UpdateConnectionStatus("Not connected");
             }
             
             // Update empty state visibility
@@ -374,12 +379,7 @@ namespace WDCableWUI.UI.Connection
             DisconnectButton.IsEnabled = false;
             EmptyStatePanel.Visibility = Visibility.Visible;
             LastStatusText.Text = message;
-            UpdateConnectionStatus("WiFi Direct unavailable", message);
-        }
-
-        private string GetRoleDiagnostics()
-        {
-            return _wifiDirectService?.EndpointDiagnostics ?? string.Empty;
+            UpdateConnectionStatus("WiFi Direct unavailable");
         }
 
         private void UpdateDiscoverabilityStatus()

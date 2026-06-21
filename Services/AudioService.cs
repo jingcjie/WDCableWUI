@@ -83,6 +83,8 @@ public sealed class AudioService : IDisposable
     private long _rtcpRttMs = -1;
     private double _interarrivalJitter;
     private long? _lastTransit;
+    private string _lastStatusMessage = "Audio Link is idle";
+    private AudioStatsEventArgs? _latestStats;
 
     private AudioService()
     {
@@ -127,6 +129,28 @@ public sealed class AudioService : IDisposable
     public string QualityMode => _qualityMode;
 
     public int ConfiguredBitrateBps => _configuredBitrateBps;
+
+    public AudioServiceSnapshot GetSnapshot()
+    {
+        lock (_stateLock)
+        {
+            var source = _mode == ModeSend
+                ? AudioProtocol.SourceSystemAudio
+                : AudioProtocol.SourceMicrophone;
+            var state = new AudioStateChangedEventArgs(
+                _mode,
+                _state,
+                Interlocked.Read(ref _streamId),
+                source,
+                AudioProtocol.CodecOpus,
+                _peerReady,
+                _state == StateStreaming,
+                _lastStatusMessage,
+                _latencyMode,
+                _qualityMode);
+            return new AudioServiceSnapshot(state, _latestStats);
+        }
+    }
 
     public event EventHandler<AudioStateChangedEventArgs>? StateChanged;
     public event EventHandler<AudioStatsEventArgs>? StatsChanged;
@@ -1416,6 +1440,7 @@ public sealed class AudioService : IDisposable
             _rtcpStarted = false;
             _peerSsrc = 0;
             _localSsrc = 0;
+            _latestStats = null;
         }
 
         if (emitStopped && previousState != StateIdle)
@@ -1495,6 +1520,10 @@ public sealed class AudioService : IDisposable
         }
 
         _jitterBuffer = new JitterBuffer(_latencyMode);
+        lock (_stateLock)
+        {
+            _latestStats = null;
+        }
     }
 
     private static IPAddress ParseLocalAddress(string? address)
@@ -1546,29 +1575,42 @@ public sealed class AudioService : IDisposable
 
     private void EmitState(string message)
     {
-        var source = _mode == ModeSend ? AudioProtocol.SourceSystemAudio : AudioProtocol.SourceMicrophone;
-        var args = new AudioStateChangedEventArgs(
-            _mode,
-            _state,
-            Interlocked.Read(ref _streamId),
-            source,
-            AudioProtocol.CodecOpus,
-            _peerReady,
-            _state == StateStreaming,
-            message,
-            _latencyMode,
-            _qualityMode);
+        AudioStateChangedEventArgs args;
+        lock (_stateLock)
+        {
+            _lastStatusMessage = message;
+            var source = _mode == ModeSend ? AudioProtocol.SourceSystemAudio : AudioProtocol.SourceMicrophone;
+            args = new AudioStateChangedEventArgs(
+                _mode,
+                _state,
+                Interlocked.Read(ref _streamId),
+                source,
+                AudioProtocol.CodecOpus,
+                _peerReady,
+                _state == StateStreaming,
+                message,
+                _latencyMode,
+                _qualityMode);
+        }
         RaiseOnDispatcher(() => StateChanged?.Invoke(this, args));
         RaiseOnDispatcher(() => StatusChanged?.Invoke(this, message));
     }
 
     private void EmitStats(AudioStatsEventArgs args)
     {
+        lock (_stateLock)
+        {
+            _latestStats = _state == StateIdle ? null : args;
+        }
         RaiseOnDispatcher(() => StatsChanged?.Invoke(this, args));
     }
 
     private void EmitAudioError(string code, string message, long streamId)
     {
+        lock (_stateLock)
+        {
+            _lastStatusMessage = $"{code}: {message}";
+        }
         RaiseOnDispatcher(() => ErrorOccurred?.Invoke(this, new AudioErrorEventArgs(code, message, streamId)));
     }
 
@@ -1691,6 +1733,21 @@ public sealed class AudioStateChangedEventArgs : EventArgs
     public string LatencyMode { get; }
 
     public string QualityMode { get; }
+}
+
+public sealed class AudioServiceSnapshot
+{
+    public AudioServiceSnapshot(
+        AudioStateChangedEventArgs state,
+        AudioStatsEventArgs? latestStats)
+    {
+        State = state;
+        LatestStats = latestStats;
+    }
+
+    public AudioStateChangedEventArgs State { get; }
+
+    public AudioStatsEventArgs? LatestStats { get; }
 }
 
 public sealed class AudioStatsEventArgs : EventArgs
