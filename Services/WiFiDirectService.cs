@@ -398,53 +398,14 @@ namespace WDCableWUI.Services
                     reason: "outbound_connect",
                     peer: device);
 
-                var nativeDevice = await Windows.Devices.WiFiDirect.WiFiDirectDevice.FromIdAsync(device.Id);
-                if (nativeDevice == null)
-                {
-                    RestorePostConnectionAttemptState(opId, "outbound_connect");
-                    OnErrorOccurred(
-                        AddDeviceBusyRecoveryHint($"Failed to create WiFi Direct device for {device.Name}"),
-                        opId,
-                        api: "WiFiDirectDevice.FromIdAsync",
-                        result: "null",
-                        reason: "outbound_connect",
-                        peer: device);
-                    return false;
-                }
-
-                OnStatusChanged(
-                    $"WiFi Direct device created for {device.Name}",
+                return await TryCompleteConnectionAsync(
+                    device,
                     opId,
-                    api: "WiFiDirectDevice.FromIdAsync",
-                    result: "success",
-                    reason: "outbound_connect",
-                    peer: device);
-
-                var endpoint = await WaitForEndpointReadyAsync(nativeDevice, opId, "outbound_connect", device).ConfigureAwait(false);
-                if (endpoint == null)
-                {
-                    nativeDevice.Dispose();
-                    RestorePostConnectionAttemptState(opId, "outbound_connect");
-                    OnErrorOccurred(
-                        AddDeviceBusyRecoveryHint($"WiFi Direct endpoint readiness timed out for {device.Name}"),
-                        opId,
-                        api: "WiFiDirectDevice.GetConnectionEndpointPairs",
-                        result: "endpoint_unavailable",
-                        reason: "endpoint_unavailable",
-                        peer: device);
-                    return false;
-                }
-
-                ApplyConnectedDevice(device, nativeDevice, endpoint, opId, "outbound_connect");
-                OnDeviceConnected(device);
-                OnStatusChanged(
-                    $"Connected to {device.Name}. {EndpointDiagnostics}",
-                    opId,
-                    api: "WiFiDirectDevice.GetConnectionEndpointPairs",
-                    result: "connected",
-                    reason: "outbound_connect",
-                    peer: device);
-                return true;
+                    "outbound_connect",
+                    createdStatus: $"WiFi Direct device created for {device.Name}",
+                    createFailedMessage: $"Failed to create WiFi Direct device for {device.Name}",
+                    endpointTimeoutMessage: $"WiFi Direct endpoint readiness timed out for {device.Name}",
+                    connectedStatus: () => $"Connected to {device.Name}. {EndpointDiagnostics}").ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -912,52 +873,14 @@ namespace WDCableWUI.Services
 
                 SetState(WiFiDirectServiceState.ConnectingInbound, opId, "WiFiDirectDevice.FromIdAsync", result: "started", reason: "incoming_connect", peer: requestingDevice);
 
-                var nativeDevice = await Windows.Devices.WiFiDirect.WiFiDirectDevice.FromIdAsync(requestingDevice.Id);
-                if (nativeDevice == null)
-                {
-                    RestorePostConnectionAttemptState(opId, "incoming_connect");
-                    OnErrorOccurred(
-                        AddDeviceBusyRecoveryHint($"Failed to create WiFi Direct device for accepted request from {requestingDevice.Name}"),
-                        opId,
-                        api: "WiFiDirectDevice.FromIdAsync",
-                        result: "null",
-                        reason: "incoming_connect",
-                        peer: requestingDevice);
-                    return;
-                }
-
-                OnStatusChanged(
-                    $"WiFi Direct device created for accepted request from {requestingDevice.Name}",
+                await TryCompleteConnectionAsync(
+                    requestingDevice,
                     opId,
-                    api: "WiFiDirectDevice.FromIdAsync",
-                    result: "success",
-                    reason: "incoming_connect",
-                    peer: requestingDevice);
-
-                var endpoint = await WaitForEndpointReadyAsync(nativeDevice, opId, "incoming_connect", requestingDevice).ConfigureAwait(false);
-                if (endpoint == null)
-                {
-                    nativeDevice.Dispose();
-                    RestorePostConnectionAttemptState(opId, "incoming_connect");
-                    OnErrorOccurred(
-                        AddDeviceBusyRecoveryHint($"WiFi Direct endpoint readiness timed out for accepted request from {requestingDevice.Name}"),
-                        opId,
-                        api: "WiFiDirectDevice.GetConnectionEndpointPairs",
-                        result: "endpoint_unavailable",
-                        reason: "endpoint_unavailable",
-                        peer: requestingDevice);
-                    return;
-                }
-
-                ApplyConnectedDevice(requestingDevice, nativeDevice, endpoint, opId, "incoming_connect");
-                OnDeviceConnected(requestingDevice);
-                OnStatusChanged(
-                    $"Accepted connection from {requestingDevice.Name}. {EndpointDiagnostics}",
-                    opId,
-                    api: "WiFiDirectDevice.GetConnectionEndpointPairs",
-                    result: "connected",
-                    reason: "incoming_connect",
-                    peer: requestingDevice);
+                    "incoming_connect",
+                    createdStatus: $"WiFi Direct device created for accepted request from {requestingDevice.Name}",
+                    createFailedMessage: $"Failed to create WiFi Direct device for accepted request from {requestingDevice.Name}",
+                    endpointTimeoutMessage: $"WiFi Direct endpoint readiness timed out for accepted request from {requestingDevice.Name}",
+                    connectedStatus: () => $"Accepted connection from {requestingDevice.Name}. {EndpointDiagnostics}").ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -1021,6 +944,64 @@ namespace WDCableWUI.Services
                     reason: "incoming_request",
                     peer: peer);
             }
+        }
+
+        private async Task<bool> TryCompleteConnectionAsync(
+            WiFiDirectDevice peer,
+            string opId,
+            string reason,
+            string createdStatus,
+            string createFailedMessage,
+            string endpointTimeoutMessage,
+            Func<string> connectedStatus)
+        {
+            var nativeDevice = await Windows.Devices.WiFiDirect.WiFiDirectDevice.FromIdAsync(peer.Id);
+            if (nativeDevice == null)
+            {
+                RestorePostConnectionAttemptState(opId, reason);
+                OnErrorOccurred(
+                    AddDeviceBusyRecoveryHint(createFailedMessage),
+                    opId,
+                    api: "WiFiDirectDevice.FromIdAsync",
+                    result: "null",
+                    reason: reason,
+                    peer: peer);
+                return false;
+            }
+
+            OnStatusChanged(
+                createdStatus,
+                opId,
+                api: "WiFiDirectDevice.FromIdAsync",
+                result: "success",
+                reason: reason,
+                peer: peer);
+
+            var endpoint = await WaitForEndpointReadyAsync(nativeDevice, opId, reason, peer).ConfigureAwait(false);
+            if (endpoint == null)
+            {
+                nativeDevice.Dispose();
+                RestorePostConnectionAttemptState(opId, reason);
+                OnErrorOccurred(
+                    AddDeviceBusyRecoveryHint(endpointTimeoutMessage),
+                    opId,
+                    api: "WiFiDirectDevice.GetConnectionEndpointPairs",
+                    result: "endpoint_unavailable",
+                    reason: "endpoint_unavailable",
+                    peer: peer);
+                return false;
+            }
+
+            ApplyConnectedDevice(peer, nativeDevice, endpoint, opId, reason);
+            OnDeviceConnected(peer);
+            OnStatusChanged(
+                connectedStatus(),
+                opId,
+                api: "WiFiDirectDevice.GetConnectionEndpointPairs",
+                result: "connected",
+                reason: reason,
+                peer: peer);
+            return true;
         }
 
         private async Task<EndpointInfo?> WaitForEndpointReadyAsync(
