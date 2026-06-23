@@ -105,6 +105,12 @@ Use [WDCable for Android](https://github.com/jingcjie/WDCable_flutter) to connec
 
 Install WDCable from the Microsoft Store using the button above, or build it from source.
 
+### Install with winget
+
+```powershell
+winget install --id 9MZQMRHFFJJW --source msstore
+```
+
 ### Building from Source
 
 1. Clone this repository:
